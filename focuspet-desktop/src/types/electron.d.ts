@@ -23,6 +23,7 @@ export interface ElectronAPI {
   startWindowDrag: (point: { screenX: number; screenY: number }) => void
   moveWindowDrag: (point: { screenX: number; screenY: number }) => void
   endWindowDrag: () => void
+  setBubbleVisible: (visible: boolean) => void
   getUserDataPath: () => Promise<string>
   getDiagnostics: () => Promise<unknown>
   copyDiagnostics: () => Promise<boolean>

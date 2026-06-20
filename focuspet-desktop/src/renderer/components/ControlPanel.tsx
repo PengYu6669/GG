@@ -22,7 +22,7 @@ export default function ControlPanel({
     <>
       {/* 控制面板 */}
       <div
-        className={`absolute ${anchor === 'left' ? 'left-[204px]' : 'right-2'} top-3 bottom-3 w-80 bg-[#0F0F13]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden`}
+        className={`absolute z-[100] ${anchor === 'left' ? 'left-[234px]' : 'right-3'} top-3 bottom-3 w-80 bg-[#0F0F13]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden`}
         style={{ pointerEvents: 'auto' }}
         onMouseEnter={() => window.electronAPI?.setIgnoreMouseEvents(false)}
       >

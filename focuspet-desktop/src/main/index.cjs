@@ -6,7 +6,8 @@ const { startAppMonitor } = require("./appMonitor.cjs");
 
 const WINDOW_WIDTH = 760;
 const WINDOW_HEIGHT = 540;
-const COLLAPSED_WIDTH = 360;
+const COLLAPSED_WIDTH = 216;
+const BUBBLE_WIDTH = 380;
 const COLLAPSED_HEIGHT = 232;
 let mainWindow = null;
 let tray = null;
@@ -14,8 +15,10 @@ let isQuiting = false;
 let stopAppMonitor = null;
 let idleMonitorTimer = null;
 let windowDrag = null;
+let windowDragTimer = null;
 let panelOpen = false;
 let autoMousePassthrough = true;
+let bubbleVisible = false;
 
 function appMonitorStatePath() {
   return path.join(app.getPath("userData"), "focuspet-app-monitor.json");
@@ -190,7 +193,20 @@ function saveWindowStateFromBounds() {
 function expectedWindowSize() {
   return panelOpen
     ? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT }
-    : { width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT };
+    : { width: bubbleVisible ? BUBBLE_WIDTH : COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT };
+}
+
+function resizeWindowToExpectedSize() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const expected = expectedWindowSize();
+  const b = mainWindow.getBounds();
+  if (b.width === expected.width && b.height === expected.height) return;
+  const display = screen.getDisplayMatching(b);
+  const centerX = b.x + b.width / 2;
+  const keepRightEdge = centerX >= display.workArea.x + display.workArea.width / 2;
+  const nextX = keepRightEdge ? b.x + b.width - expected.width : b.x;
+  const pos = clampWindowPosition(nextX, b.y, expected.width, expected.height);
+  mainWindow.setBounds({ x: pos.x, y: pos.y, width: expected.width, height: expected.height });
 }
 
 function enforceWindowSize() {
@@ -203,6 +219,10 @@ function enforceWindowSize() {
 }
 
 function stopWindowDrag() {
+  if (windowDragTimer) {
+    clearInterval(windowDragTimer);
+    windowDragTimer = null;
+  }
   windowDrag = null;
   if (!panelOpen && autoMousePassthrough) {
     mainWindow?.setIgnoreMouseEvents(true, { forward: true });
@@ -213,6 +233,7 @@ function stopWindowDrag() {
 function positionCollapsedWindow() {
   if (!mainWindow) return;
   panelOpen = false;
+  bubbleVisible = false;
   const saved = loadWindowState();
   const pos = clampWindowPosition(saved.x, saved.y, COLLAPSED_WIDTH, COLLAPSED_HEIGHT);
   mainWindow.setBounds({ x: pos.x, y: pos.y, width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT });
@@ -222,6 +243,7 @@ function positionCollapsedWindow() {
 function resetWindowPosition() {
   if (!mainWindow) return;
   panelOpen = false;
+  bubbleVisible = false;
   const pos = getDefaultCollapsedPosition();
   writeJsonFile(windowStatePath(), pos);
   mainWindow.show();
@@ -258,6 +280,7 @@ function copyDiagnostics() {
 function openPanel() {
   if (!mainWindow) return;
   panelOpen = true;
+  bubbleVisible = false;
   mainWindow.setIgnoreMouseEvents(false);
   const b = mainWindow.getBounds();
   const display = screen.getDisplayMatching(b);
@@ -357,6 +380,10 @@ function registerIpc() {
   });
   ipcMain.on("window-collapse", positionCollapsedWindow);
   ipcMain.on("window-expand", openPanel);
+  ipcMain.on("window-bubble-visible", (_, visible) => {
+    bubbleVisible = visible;
+    if (!panelOpen) resizeWindowToExpectedSize();
+  });
   ipcMain.handle("window-reset-position", () => {
     resetWindowPosition();
     return true;
@@ -377,17 +404,27 @@ function registerIpc() {
       height: b.height,
     };
     mainWindow.setIgnoreMouseEvents(false);
+    if (windowDragTimer) clearInterval(windowDragTimer);
+    windowDragTimer = setInterval(() => {
+      if (!mainWindow || !windowDrag) return;
+      moveDraggedWindow(screen.getCursorScreenPoint());
+    }, 8);
   });
   ipcMain.on("window-drag-move", (_, point) => {
+    moveDraggedWindow(point);
+  });
+  function moveDraggedWindow(point) {
     if (!mainWindow || !windowDrag) return;
+    const screenX = typeof point.screenX === "number" ? point.screenX : point.x ?? 0;
+    const screenY = typeof point.screenY === "number" ? point.screenY : point.y ?? 0;
     const pos = clampWindowPosition(
-      Math.round(point.screenX + windowDrag.offsetX),
-      Math.round(point.screenY + windowDrag.offsetY),
+      Math.round(screenX + windowDrag.offsetX),
+      Math.round(screenY + windowDrag.offsetY),
       windowDrag.width,
       windowDrag.height,
     );
     mainWindow.setBounds({ x: pos.x, y: pos.y, width: windowDrag.width, height: windowDrag.height });
-  });
+  }
   ipcMain.on("window-drag-end", () => {
     stopWindowDrag();
   });

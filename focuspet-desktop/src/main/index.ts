@@ -14,7 +14,8 @@ const { startAppMonitor } = require('./appMonitor.cjs') as {
 // ==================== 常量 ====================
 const WINDOW_WIDTH = 760
 const WINDOW_HEIGHT = 540
-const COLLAPSED_WIDTH = 360 // 收起后显示桌宠和气泡，透明区默认鼠标穿透
+const COLLAPSED_WIDTH = 216 // 收起后只保留桌宠主体，透明区默认鼠标穿透
+const BUBBLE_WIDTH = 380
 const COLLAPSED_HEIGHT = 232
 
 let mainWindow: BrowserWindow | null = null
@@ -25,8 +26,10 @@ let idleMonitorTimer: ReturnType<typeof setInterval> | null = null
 let windowDrag:
   | { offsetX: number; offsetY: number; width: number; height: number }
   | null = null
+let windowDragTimer: ReturnType<typeof setInterval> | null = null
 let panelOpen = false
 let autoMousePassthrough = true
+let bubbleVisible = false
 
 interface WindowState {
   x: number
@@ -227,7 +230,20 @@ function saveWindowStateFromBounds(): void {
 function expectedWindowSize(): { width: number; height: number } {
   return panelOpen
     ? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT }
-    : { width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT }
+    : { width: bubbleVisible ? BUBBLE_WIDTH : COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT }
+}
+
+function resizeWindowToExpectedSize(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const expected = expectedWindowSize()
+  const b = mainWindow.getBounds()
+  if (b.width === expected.width && b.height === expected.height) return
+  const display = screen.getDisplayMatching(b)
+  const centerX = b.x + b.width / 2
+  const keepRightEdge = centerX >= display.workArea.x + display.workArea.width / 2
+  const nextX = keepRightEdge ? b.x + b.width - expected.width : b.x
+  const pos = clampWindowPosition(nextX, b.y, expected.width, expected.height)
+  mainWindow.setBounds({ x: pos.x, y: pos.y, width: expected.width, height: expected.height })
 }
 
 function enforceWindowSize(): void {
@@ -240,6 +256,10 @@ function enforceWindowSize(): void {
 }
 
 function stopWindowDrag(): void {
+  if (windowDragTimer) {
+    clearInterval(windowDragTimer)
+    windowDragTimer = null
+  }
   windowDrag = null
   if (!panelOpen && autoMousePassthrough) {
     mainWindow?.setIgnoreMouseEvents(true, { forward: true })
@@ -250,6 +270,7 @@ function stopWindowDrag(): void {
 function positionCollapsedWindow(): void {
   if (!mainWindow) return
   panelOpen = false
+  bubbleVisible = false
   const saved = loadWindowState()
   const pos = clampWindowPosition(saved.x, saved.y, COLLAPSED_WIDTH, COLLAPSED_HEIGHT)
   mainWindow.setBounds({ x: pos.x, y: pos.y, width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT })
@@ -259,6 +280,7 @@ function positionCollapsedWindow(): void {
 function resetWindowPosition(): void {
   if (!mainWindow) return
   panelOpen = false
+  bubbleVisible = false
   const pos = getDefaultCollapsedPosition()
   writeJsonFile(windowStatePath(), pos)
   mainWindow.show()
@@ -295,6 +317,7 @@ function copyDiagnostics(): void {
 function openPanel(): void {
   if (!mainWindow) return
   panelOpen = true
+  bubbleVisible = false
   mainWindow.setIgnoreMouseEvents(false)
   const b = mainWindow.getBounds()
   const display = screen.getDisplayMatching(b)
@@ -477,6 +500,11 @@ function registerIpc(): void {
     openPanel()
   })
 
+  ipcMain.on('window-bubble-visible', (_, visible: boolean) => {
+    bubbleVisible = visible
+    if (!panelOpen) resizeWindowToExpectedSize()
+  })
+
   ipcMain.handle('window-reset-position', () => {
     resetWindowPosition()
     return true
@@ -503,18 +531,29 @@ function registerIpc(): void {
       height: b.height,
     }
     mainWindow.setIgnoreMouseEvents(false)
+    if (windowDragTimer) clearInterval(windowDragTimer)
+    windowDragTimer = setInterval(() => {
+      if (!mainWindow || !windowDrag) return
+      moveDraggedWindow(screen.getCursorScreenPoint())
+    }, 8)
   })
 
   ipcMain.on('window-drag-move', (_, point: { screenX: number; screenY: number }) => {
+    moveDraggedWindow(point)
+  })
+
+  function moveDraggedWindow(point: { x?: number; y?: number; screenX?: number; screenY?: number }): void {
     if (!mainWindow || !windowDrag) return
+    const screenX = typeof point.screenX === 'number' ? point.screenX : point.x ?? 0
+    const screenY = typeof point.screenY === 'number' ? point.screenY : point.y ?? 0
     const pos = clampWindowPosition(
-      Math.round(point.screenX + windowDrag.offsetX),
-      Math.round(point.screenY + windowDrag.offsetY),
+      Math.round(screenX + windowDrag.offsetX),
+      Math.round(screenY + windowDrag.offsetY),
       windowDrag.width,
       windowDrag.height,
     )
     mainWindow.setBounds({ x: pos.x, y: pos.y, width: windowDrag.width, height: windowDrag.height })
-  })
+  }
 
   ipcMain.on('window-drag-end', () => {
     stopWindowDrag()

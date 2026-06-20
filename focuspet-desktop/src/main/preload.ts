@@ -13,6 +13,7 @@ const electronAPI = {
   moveWindowDrag: (point: { screenX: number; screenY: number }) =>
     ipcRenderer.send('window-drag-move', point),
   endWindowDrag: () => ipcRenderer.send('window-drag-end'),
+  setBubbleVisible: (visible: boolean) => ipcRenderer.send('window-bubble-visible', visible),
 
   // 数据
   getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),

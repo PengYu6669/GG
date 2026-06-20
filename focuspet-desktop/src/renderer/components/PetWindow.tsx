@@ -39,11 +39,11 @@ const PET_Y = 12
 const PET_GROUND_Y = 220
 
 export default function PetWindow({
-  onOpenPanel,
+  onTogglePanel,
   bubble,
   panelOpen = false,
 }: {
-  onOpenPanel: () => void
+  onTogglePanel: () => void
   bubble: { message: string } | null
   panelOpen?: boolean
 }) {
@@ -98,19 +98,17 @@ export default function PetWindow({
         b.vx = Math.max(b.vx, 0.75)
       } else if (sm.getState() === 'walkLeft') {
         b.vx = Math.min(b.vx, -0.75)
-        if (b.x <= 4) {
-          b.x = 132
-        }
       }
       const groundY = PET_GROUND_Y
       if (b.y + b.height >= groundY - 1 && sm.getState() === 'air') sm.onLand()
 
-      canvas.style.transform = `translate(${b.x}px, ${b.y}px)`
+      const isWalkLeft = sm.getState() === 'walkLeft'
+      canvas.style.transformOrigin = 'top left'
+      canvas.style.transform = isWalkLeft
+        ? `translate(${b.x + b.width}px, ${b.y}px) scaleX(-1)`
+        : `translate(${b.x}px, ${b.y}px)`
       if (bubbleRef.current) {
-        bubbleRef.current.style.transform = `translate(${Math.max(122, b.x + 148)}px, ${Math.max(6, b.y - 10)}px)`
-      }
-      if (sm.getState() === 'walkLeft') {
-        canvas.style.transform = `translate(${b.x + b.width}px, ${b.y}px) scaleX(-1)`
+        bubbleRef.current.style.transform = `translate(${Math.max(122, b.x + 150)}px, ${Math.max(4, b.y + 4)}px)`
       }
 
       animator.render(timestamp)
@@ -170,6 +168,7 @@ export default function PetWindow({
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
+    if (e.detail > 1) return
     if (dragMovedRef.current) return
     if (sm.getState() === 'drag' || sm.getState() === 'air') return
     const now = performance.now()
@@ -182,11 +181,12 @@ export default function PetWindow({
     }
   }, [sm, engine])
 
-  const handleOpenPanel = useCallback((e: React.MouseEvent) => {
+  const handleTogglePanel = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    onOpenPanel()
-  }, [onOpenPanel])
+    if (dragMovedRef.current) return
+    onTogglePanel()
+  }, [onTogglePanel])
 
   const handleMouseLeaveCanvas = useCallback(() => {
     if (!draggingWindowRef.current && !panelOpen) {
@@ -196,11 +196,11 @@ export default function PetWindow({
   }, [handleMouseUp, panelOpen])
 
   return (
-    <div className="fixed inset-0 select-none" style={{ pointerEvents: 'none' }}>
+    <div className="fixed inset-0 z-[9990] select-none" style={{ pointerEvents: 'none' }}>
       {bubble && (
         <div
           ref={bubbleRef}
-          className="absolute z-[60] max-w-44 rounded-xl border border-black/15 bg-white/90 px-3 py-2 text-[13px] font-medium leading-snug text-black shadow-md backdrop-blur-md"
+          className="absolute z-[9999] min-w-36 max-w-[220px] rounded-xl border border-black/20 bg-[#FFFDF7] px-3.5 py-2.5 text-[15px] font-semibold leading-snug text-[#111111] shadow-[0_10px_28px_rgba(0,0,0,0.28)]"
           style={{ pointerEvents: 'none' }}
         >
           <div>{bubble.message}</div>
@@ -221,8 +221,8 @@ export default function PetWindow({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeaveCanvas}
         onClick={handleClick}
-        onContextMenu={handleOpenPanel}
-        onDoubleClick={handleOpenPanel}
+        onContextMenu={handleTogglePanel}
+        onDoubleClick={handleTogglePanel}
       />
     </div>
   )

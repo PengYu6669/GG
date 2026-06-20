@@ -46,9 +46,22 @@ function FocusPetApp() {
     window.electronAPI?.collapseWindow()
   }, [])
 
+  const togglePanel = useCallback(() => {
+    setPanelOpen(open => {
+      const next = !open
+      if (next) window.electronAPI?.expandWindow()
+      else window.electronAPI?.collapseWindow()
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     window.electronAPI?.setIgnoreMouseEvents(!panelOpen)
   }, [panelOpen])
+
+  useEffect(() => {
+    window.electronAPI?.setBubbleVisible(Boolean(petBubble) && !panelOpen)
+  }, [petBubble, panelOpen])
 
   useEffect(() => {
     window.electronAPI?.onAction((action) => {
@@ -394,8 +407,8 @@ function FocusPetApp() {
 
   return (
     <div className="w-full h-full bg-transparent">
-      <PetWindow onOpenPanel={openPanel} bubble={petBubble} panelOpen={panelOpen} />
       {panelOpen && <ControlPanel anchor={panelAnchor} onClose={closePanel} onAppMonitorChange={scheduleSaveAppMonitor} />}
+      <PetWindow onTogglePanel={togglePanel} bubble={petBubble} panelOpen={panelOpen} />
     </div>
   )
 }
