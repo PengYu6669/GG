@@ -96,7 +96,7 @@ export default function PetWindow({
 
       canvas.style.transform = `translate(${b.x}px, ${b.y}px)`
       if (bubbleRef.current) {
-        bubbleRef.current.style.transform = `translate(${Math.max(68, b.x + 92)}px, ${Math.max(8, b.y + 4)}px)`
+        bubbleRef.current.style.transform = `translate(${Math.max(122, b.x + 154)}px, ${Math.max(8, b.y - 8)}px)`
       }
       if (sm.getState() === 'walkLeft') {
         canvas.style.transform = `translate(${b.x + b.width}px, ${b.y}px) scaleX(-1)`
@@ -184,7 +184,7 @@ export default function PetWindow({
       {bubble && (
         <div
           ref={bubbleRef}
-          className="absolute z-[60] max-w-28 rounded-xl border border-white/[0.06] bg-[#111118]/62 px-2 py-1.5 text-[10px] leading-snug text-white/60 shadow-md backdrop-blur-md"
+          className="absolute z-[60] max-w-32 rounded-xl border border-black/10 bg-white/80 px-2.5 py-1.5 text-[11px] leading-snug text-black/75 shadow-md backdrop-blur-md"
           style={{ pointerEvents: 'none' }}
         >
           <div>{bubble.message}</div>
