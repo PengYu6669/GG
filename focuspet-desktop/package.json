@@ -1,0 +1,34 @@
+{
+  "name": "focuspet-desktop",
+  "version": "0.1.0",
+  "description": "FocusPet — 桌面防拖延桌宠伴侣",
+  "main": "./src/main/index.cjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "gsap": "^3.12.0",
+    "lucide-react": "^0.300.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "^2.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  }
+}

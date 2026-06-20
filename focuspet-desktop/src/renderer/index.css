@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Microsoft YaHei", "PingFang SC", sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Canvas 桌宠拖拽时显示抓手 */
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.soft-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.soft-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.soft-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.soft-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+.soft-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}

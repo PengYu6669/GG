@@ -1,0 +1,212 @@
+import { useEffect, useRef, useCallback } from 'react'
+import { PetDefinition, SpriteAnimator } from '../engine/SpriteAnimator'
+import { PhysicsEngine, PhysicsBody } from '../engine/PhysicsEngine'
+import { PetState } from '../engine/StateMachine'
+import { ParticleEmitter } from '../engine/ParticleEmitter'
+import { usePetEngine } from '../context/PetContext'
+import pigHeroSpritesheet from '../assets/pets/pixel-pig-hero/spritesheet.webp'
+
+const stateToAnim: Record<PetState, string> = {
+  idle: 'idle', walkRight: 'walkRight', walkLeft: 'walkLeft',
+  drag: 'idle', air: 'idle',
+  focus: 'focus', celebrate: 'celebrate', sad: 'sad',
+  angry: 'angry', sleep: 'sleep', alert: 'alert',
+}
+
+const pixelPigHeroPet: PetDefinition = {
+  name: 'pixel-pig-hero',
+  cellWidth: 192,
+  cellHeight: 208,
+  columns: 8,
+  rows: 9,
+  spritesheetPath: pigHeroSpritesheet,
+  animations: {
+    idle: { row: 0, frames: [0, 1, 2, 3, 4, 5], fps: 6 },
+    walkRight: { row: 1, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
+    walkLeft: { row: 2, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
+    focus: { row: 7, frames: [0, 1, 2, 3, 4, 5], fps: 5 },
+    celebrate: { row: 4, frames: [0, 1, 2, 3, 4], fps: 10 },
+    sad: { row: 5, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 5 },
+    angry: { row: 6, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
+    sleep: { row: 0, frames: [2, 3, 4, 5], fps: 3 },
+    alert: { row: 8, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
+  },
+}
+
+const PET_X = 12
+const PET_Y = 12
+const PET_GROUND_Y = 220
+
+export default function PetWindow({
+  onOpenPanel,
+  bubble,
+}: {
+  onOpenPanel: () => void
+  bubble: { message: string; actions?: Array<{ label: string; title: string; onClick: () => void }> } | null
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const engine = usePetEngine()
+  const { stateMachine: sm } = engine
+  const rafRef = useRef<number>(0)
+  const dragMovedRef = useRef(false)
+  const draggingWindowRef = useRef(false)
+  const lastClickBounceRef = useRef(0)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    // 粒子
+    const particles = new ParticleEmitter()
+    engine.particles = particles
+
+    // 动画器
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const animator = new SpriteAnimator(canvas)
+    engine.animator = animator
+    animator.loadPet(pixelPigHeroPet).catch(err => {
+      console.error('[PetWindow] loadPet failed:', err)
+    })
+
+    // 物理
+    const body: PhysicsBody = {
+      x: PET_X, y: PET_Y,
+      vx: 0, vy: 0, width: 192, height: 208, isDragging: false,
+    }
+    const physics = new PhysicsEngine(body, PET_GROUND_Y, 216)
+    engine.physics = physics
+
+    // 状态 → 动画 + 粒子
+    sm.onChange((newState) => {
+      animator.setAnimation(stateToAnim[newState] ?? 'idle')
+      const b = physics.getBody()
+      if (newState === 'celebrate') particles.emit('stardust', b.x + 96, b.y + 60, 12)
+      if (newState === 'angry') particles.emit('spark', b.x + 96, b.y + 30, 8)
+      if (newState === 'sad') particles.emit('raindrop', b.x + 96, b.y, 5)
+      if (newState === 'sleep') particles.emit('zzz', b.x + 120, b.y - 20, 3)
+    })
+
+    // 渲染循环
+    const loop = (timestamp: number) => {
+      if (sm.getState() !== 'drag') physics.update()
+      const b = physics.getBody()
+      const groundY = PET_GROUND_Y
+      if (b.y + b.height >= groundY - 1 && sm.getState() === 'air') sm.onLand()
+
+      canvas.style.transform = `translate(${b.x}px, ${b.y}px)`
+      if (bubbleRef.current) {
+        bubbleRef.current.style.transform = `translate(${Math.max(68, b.x + 92)}px, ${Math.max(8, b.y + 4)}px)`
+      }
+      if (sm.getState() === 'walkLeft') {
+        canvas.style.transform = `translate(${b.x + b.width}px, ${b.y}px) scaleX(-1)`
+      }
+
+      animator.render(timestamp)
+      sm.tick(0.016)
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    rafRef.current = requestAnimationFrame(loop)
+
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      particles.destroy()
+      engine.animator = null
+      engine.physics = null
+      engine.particles = null
+    }
+  }, [])
+
+  // ====== 鼠标 ======
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    dragMovedRef.current = false
+    draggingWindowRef.current = true
+    sm.onDragStart()
+    const body = engine.physics?.getBody()
+    if (body) {
+      body.vx = 0
+      body.vy = 0
+      body.x = PET_X
+      body.y = PET_Y
+    }
+    window.electronAPI?.startWindowDrag({ screenX: e.screenX, screenY: e.screenY })
+  }, [sm, engine])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (e.buttons === 1 && draggingWindowRef.current) {
+      dragMovedRef.current = true
+    }
+    engine.animator?.setEyeTarget(e.clientX, e.clientY)
+  }, [engine])
+
+  const handleMouseUp = useCallback(() => {
+    if (draggingWindowRef.current) {
+      draggingWindowRef.current = false
+      window.electronAPI?.endWindowDrag()
+    }
+    const body = engine.physics?.getBody()
+    if (body) {
+      body.x = PET_X
+      body.y = PET_Y
+      body.vx = 0
+      body.vy = 0
+    }
+    sm.onDragEnd(0, 0)
+  }, [sm, engine])
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (dragMovedRef.current) return
+    if (sm.getState() === 'drag' || sm.getState() === 'air') return
+    const now = performance.now()
+    if (now - lastClickBounceRef.current < 700) return
+    sm.onClick()
+    const body = engine.physics?.getBody()
+    if (body && engine.physics?.isOnGround()) {
+      lastClickBounceRef.current = now
+      engine.physics.applyForce(0, -5)
+    }
+  }, [sm, engine])
+
+  const handleOpenPanel = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onOpenPanel()
+  }, [onOpenPanel])
+
+  const handleMouseLeaveCanvas = useCallback(() => {
+    handleMouseUp()
+  }, [handleMouseUp])
+
+  return (
+    <div className="fixed inset-0 select-none" style={{ pointerEvents: 'none' }}>
+      {bubble && (
+        <div
+          ref={bubbleRef}
+          className="absolute z-[60] max-w-28 rounded-xl border border-white/[0.06] bg-[#111118]/62 px-2 py-1.5 text-[10px] leading-snug text-white/60 shadow-md backdrop-blur-md"
+          style={{ pointerEvents: 'none' }}
+        >
+          <div>{bubble.message}</div>
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        className="absolute z-50 cursor-grab active:cursor-grabbing"
+        style={{
+          pointerEvents: 'auto',
+          width: '192px',
+          height: '208px',
+          imageRendering: 'pixelated',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeaveCanvas}
+        onClick={handleClick}
+        onContextMenu={handleOpenPanel}
+        onDoubleClick={handleOpenPanel}
+      />
+    </div>
+  )
+}

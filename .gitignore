@@ -1,0 +1,13 @@
+.idea/
+.claude/
+
+focuspet-desktop/node_modules/
+focuspet-desktop/out/
+focuspet-desktop/dist/
+focuspet-desktop/release/
+focuspet-desktop/.vite/
+
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
