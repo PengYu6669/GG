@@ -12,9 +12,9 @@ const { startAppMonitor } = require('./appMonitor.cjs') as {
 }
 
 // ==================== 常量 ====================
-const WINDOW_WIDTH = 700
-const WINDOW_HEIGHT = 500
-const COLLAPSED_WIDTH = 216 // 收起后只显示桌宠
+const WINDOW_WIDTH = 760
+const WINDOW_HEIGHT = 540
+const COLLAPSED_WIDTH = 360 // 收起后显示桌宠和气泡，透明区默认鼠标穿透
 const COLLAPSED_HEIGHT = 232
 
 let mainWindow: BrowserWindow | null = null
@@ -25,8 +25,8 @@ let idleMonitorTimer: ReturnType<typeof setInterval> | null = null
 let windowDrag:
   | { offsetX: number; offsetY: number; width: number; height: number }
   | null = null
-let windowDragTimer: ReturnType<typeof setInterval> | null = null
 let panelOpen = false
+let autoMousePassthrough = true
 
 interface WindowState {
   x: number
@@ -65,6 +65,124 @@ function writeJsonFile(file: string, state: unknown): boolean {
     console.error('[FocusPet] Failed to write state:', err)
     return false
   }
+}
+
+function loadLocalEnv(): void {
+  const envPath = path.join(process.cwd(), '.env')
+  if (!fs.existsSync(envPath)) return
+  try {
+    const lines = fs.readFileSync(envPath, 'utf-8').split(/\r?\n/)
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const match = trimmed.match(/^([\w.-]+)\s*=\s*(.*)$/)
+      if (!match) continue
+      const key = match[1]
+      const value = match[2].replace(/^['"]|['"]$/g, '')
+      if (!process.env[key]) process.env[key] = value
+    }
+  } catch (err) {
+    console.error('[FocusPet] Failed to load .env:', err)
+  }
+}
+
+type AiBreakdownTask = {
+  name: string
+  priority: 'high' | 'medium' | 'low'
+  estimatedPomos: number
+  startAt?: number
+  endAt?: number
+}
+
+type AiAppReviewPayload = {
+  taskName?: string
+  app: string
+  title: string
+  domain?: string
+  url?: string
+  contextKind?: string
+}
+
+type ChatMessage = { role: 'system' | 'user'; content: string }
+
+async function requestDeepSeekJson(messages: ChatMessage[]): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey) {
+    return { ok: false, error: '缺少 DEEPSEEK_API_KEY，先配置后再用 AI 功能。' }
+  }
+
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '')
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+    }),
+  })
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    return { ok: false, error: `DeepSeek 请求失败：${response.status}${detail ? ` ${detail.slice(0, 80)}` : ''}` }
+  }
+
+  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
+  const text = data.choices?.[0]?.message?.content
+  return text ? { ok: true, text } : { ok: false, error: 'DeepSeek 没有返回可用结果。' }
+}
+
+async function breakDownTaskWithAI(task: AiBreakdownTask): Promise<{ ok: boolean; tasks?: string[]; error?: string }> {
+  const result = await requestDeepSeekJson([
+    {
+      role: 'system',
+      content: '你是 ADHD 友好的任务拆解助手。只输出 JSON，不要 Markdown。格式：{"tasks":["步骤"]}。把任务拆成 5 到 8 个具体、可开始、可验证的小步骤，每一步不超过 24 个中文字符。',
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: task.name,
+        priority: task.priority,
+        estimatedPomos: task.estimatedPomos,
+        startAt: task.startAt ? new Date(task.startAt).toISOString() : null,
+        endAt: task.endAt ? new Date(task.endAt).toISOString() : null,
+      }),
+    },
+  ])
+  if (!result.ok || !result.text) return { ok: false, error: result.error ?? 'AI 拆解失败。' }
+  const text = stripJsonFence(result.text)
+  if (!text) return { ok: false, error: 'AI 没有返回可用结果。' }
+  const parsed = JSON.parse(text) as { tasks?: string[] }
+  const tasks = (parsed.tasks ?? []).map(item => String(item).trim()).filter(Boolean).slice(0, 8)
+  if (tasks.length === 0) return { ok: false, error: 'AI 没有拆出任务。' }
+  return { ok: true, tasks }
+}
+
+async function reviewAppWithAI(payload: AiAppReviewPayload): Promise<{ ok: boolean; rule?: 'allow' | 'block' | 'neutral'; reason?: string; error?: string }> {
+  const result = await requestDeepSeekJson([
+    {
+      role: 'system',
+      content: '你是专注应用分类器。判断当前应用/网站对当前任务是否应该放行。只输出 JSON，格式：{"rule":"allow|block|neutral","reason":"原因"}。规则：开发、学习、文档、AI 助手、GitHub 通常 allow；游戏、短视频、社交娱乐、购物通常 block；证据不足 neutral。',
+    },
+    {
+      role: 'user',
+      content: JSON.stringify(payload),
+    },
+  ])
+  if (!result.ok || !result.text) return { ok: false, error: result.error ?? '智能评审失败。' }
+  const text = stripJsonFence(result.text)
+  const parsed = JSON.parse(text) as { rule?: 'allow' | 'block' | 'neutral'; reason?: string }
+  if (!parsed.rule) return { ok: false, error: '智能评审结果无效。' }
+  return { ok: true, rule: parsed.rule, reason: parsed.reason ?? '' }
+}
+
+function stripJsonFence(value: string): string {
+  return value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
 }
 
 function loadAppMonitorState(): unknown {
@@ -122,11 +240,10 @@ function enforceWindowSize(): void {
 }
 
 function stopWindowDrag(): void {
-  if (windowDragTimer) {
-    clearInterval(windowDragTimer)
-    windowDragTimer = null
-  }
   windowDrag = null
+  if (!panelOpen && autoMousePassthrough) {
+    mainWindow?.setIgnoreMouseEvents(true, { forward: true })
+  }
   saveWindowStateFromBounds()
 }
 
@@ -136,6 +253,7 @@ function positionCollapsedWindow(): void {
   const saved = loadWindowState()
   const pos = clampWindowPosition(saved.x, saved.y, COLLAPSED_WIDTH, COLLAPSED_HEIGHT)
   mainWindow.setBounds({ x: pos.x, y: pos.y, width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT })
+  if (autoMousePassthrough) mainWindow.setIgnoreMouseEvents(true, { forward: true })
 }
 
 function resetWindowPosition(): void {
@@ -146,6 +264,7 @@ function resetWindowPosition(): void {
   mainWindow.show()
   mainWindow.setAlwaysOnTop(true)
   mainWindow.setBounds({ x: pos.x, y: pos.y, width: COLLAPSED_WIDTH, height: COLLAPSED_HEIGHT })
+  if (autoMousePassthrough) mainWindow.setIgnoreMouseEvents(true, { forward: true })
 }
 
 function getDiagnostics(): Record<string, unknown> {
@@ -176,6 +295,7 @@ function copyDiagnostics(): void {
 function openPanel(): void {
   if (!mainWindow) return
   panelOpen = true
+  mainWindow.setIgnoreMouseEvents(false)
   const b = mainWindow.getBounds()
   const display = screen.getDisplayMatching(b)
   const centerX = b.x + b.width / 2
@@ -232,7 +352,7 @@ function createWindow(): void {
   mainWindow.on('hide', stopWindowDrag)
 
   // 默认不穿透（Canvas 区域由 CSS pointer-events 控制）
-  mainWindow.setIgnoreMouseEvents(false)
+  if (autoMousePassthrough) mainWindow.setIgnoreMouseEvents(true, { forward: true })
 
   // 窗口关闭 = 隐藏
   mainWindow.on('close', (event) => {
@@ -345,6 +465,7 @@ function startSystemIdleMonitor(): void {
 // ==================== IPC 通信 ====================
 function registerIpc(): void {
   ipcMain.on('set-ignore-mouse-events', (_, ignore: boolean) => {
+    autoMousePassthrough = ignore
     mainWindow?.setIgnoreMouseEvents(ignore, { forward: true })
   })
 
@@ -382,18 +503,17 @@ function registerIpc(): void {
       height: b.height,
     }
     mainWindow.setIgnoreMouseEvents(false)
-    if (windowDragTimer) clearInterval(windowDragTimer)
-    windowDragTimer = setInterval(() => {
-      if (!mainWindow || !windowDrag) return
-      const cursor = screen.getCursorScreenPoint()
-      const pos = clampWindowPosition(
-        Math.round(cursor.x + windowDrag.offsetX),
-        Math.round(cursor.y + windowDrag.offsetY),
-        windowDrag.width,
-        windowDrag.height,
-      )
-      mainWindow.setBounds({ x: pos.x, y: pos.y, width: windowDrag.width, height: windowDrag.height })
-    }, 16)
+  })
+
+  ipcMain.on('window-drag-move', (_, point: { screenX: number; screenY: number }) => {
+    if (!mainWindow || !windowDrag) return
+    const pos = clampWindowPosition(
+      Math.round(point.screenX + windowDrag.offsetX),
+      Math.round(point.screenY + windowDrag.offsetY),
+      windowDrag.width,
+      windowDrag.height,
+    )
+    mainWindow.setBounds({ x: pos.x, y: pos.y, width: windowDrag.width, height: windowDrag.height })
   })
 
   ipcMain.on('window-drag-end', () => {
@@ -405,6 +525,20 @@ function registerIpc(): void {
   ipcMain.handle('app-save-state', (_, state: unknown) => writeJsonFile(appStatePath(), state))
   ipcMain.handle('app-monitor-load-state', () => loadAppMonitorState())
   ipcMain.handle('app-monitor-save-state', (_, state: unknown) => saveAppMonitorState(state))
+  ipcMain.handle('task-ai-breakdown', async (_, task: AiBreakdownTask) => {
+    try {
+      return await breakDownTaskWithAI(task)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'AI 拆解失败。' }
+    }
+  })
+  ipcMain.handle('app-ai-review', async (_, payload: AiAppReviewPayload) => {
+    try {
+      return await reviewAppWithAI(payload)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : '智能评审失败。' }
+    }
+  })
   ipcMain.on('open-external', (_, url: string) => shell.openExternal(url))
   ipcMain.on('set-always-on-top', (_, flag: boolean) =>
     mainWindow?.setAlwaysOnTop(flag)
@@ -413,6 +547,7 @@ function registerIpc(): void {
 
 // ==================== 生命周期 ====================
 app.whenReady().then(() => {
+  loadLocalEnv()
   registerIpc()
   createWindow()
   createTray()

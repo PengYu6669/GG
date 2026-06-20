@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, CheckCircle2, Circle, Flag, ClipboardList, ClipboardPaste, Sparkles, Link2 } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, Circle, Flag, ClipboardList, ClipboardPaste, Sparkles } from 'lucide-react'
 import { usePetStore, type Task } from '../stores/usePetStore'
 
 const priorityColors: Record<Task['priority'], string> = {
@@ -9,7 +9,7 @@ const priorityColors: Record<Task['priority'], string> = {
 }
 
 export default function TaskPanel() {
-  const { tasks, addTask, importTasks, updateTask, breakDownTask, inferTaskContext, completeTask, deleteTask } = usePetStore()
+  const { tasks, addTask, importTasks, updateTask, breakDownTask, addSubtasks, completeTask, deleteTask } = usePetStore()
   const [newName, setNewName] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [view, setView] = useState<'scheduled' | 'unscheduled' | 'all' | 'done'>('scheduled')
@@ -18,6 +18,7 @@ export default function TaskPanel() {
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [estimatedPomos, setEstimatedPomos] = useState(1)
+  const [aiBusyTaskId, setAiBusyTaskId] = useState<string | null>(null)
 
   const filteredTasks = tasks.filter(t => {
     if (view === 'done') return t.status === 'done'
@@ -54,6 +55,35 @@ export default function TaskPanel() {
     if (count > 0) {
       setImportText('')
       setImportOpen(false)
+    }
+  }
+
+  const handleAiBreakdown = async (task: Task) => {
+    if (aiBusyTaskId) return
+    setAiBusyTaskId(task.id)
+    try {
+      const result = await window.electronAPI?.breakDownTaskWithAI({
+        name: task.name,
+        priority: task.priority,
+        estimatedPomos: task.estimatedPomos,
+        startAt: task.startAt,
+        endAt: task.endAt,
+      })
+      if (result?.ok && result.tasks?.length) {
+        const count = addSubtasks(task, result.tasks)
+        setView('all')
+        window.dispatchEvent(new CustomEvent('pet-bubble', {
+          detail: { message: `已拆成 ${count} 个小步骤，已切到全部任务。` },
+        }))
+        return
+      }
+      window.dispatchEvent(new CustomEvent('pet-bubble', {
+        detail: { message: result?.error ?? 'AI 拆解失败，先用本地模板。' },
+      }))
+      const count = breakDownTask(task.id)
+      if (count > 0) setView('all')
+    } finally {
+      setAiBusyTaskId(null)
     }
   }
 
@@ -171,7 +201,7 @@ export default function TaskPanel() {
       </div>
 
       {/* 任务列表 */}
-      <div className="flex flex-col gap-1 max-h-52 overflow-y-auto soft-scrollbar">
+      <div className="flex flex-col gap-1 max-h-72 overflow-y-auto soft-scrollbar">
         {filteredTasks.length === 0 && (
           <div className="text-center text-white/20 text-sm py-4">
             {view === 'done' ? '还没有完成的任务' : '还没有任务，添加一个吧'}
@@ -204,7 +234,6 @@ export default function TaskPanel() {
               </span>
               <div className="flex items-center gap-2 text-[10px] text-white/25">
                 <span>{formatTaskTime(task)}</span>
-                {taskContextCount(task) > 0 && <span>上下文 {taskContextCount(task)}</span>}
                 {task.status !== 'done' && (
                   <button
                     onClick={() => updateTask(task.id, { estimatedPomos: task.estimatedPomos >= 4 ? 1 : task.estimatedPomos + 1 })}
@@ -223,21 +252,12 @@ export default function TaskPanel() {
 
             {task.status !== 'done' && (
               <button
-                onClick={() => inferTaskContext(task.id)}
-                className="shrink-0 opacity-0 group-hover:opacity-100 text-white/20 hover:text-[#34D399] transition-all"
-                title="推断任务上下文"
+                onClick={() => handleAiBreakdown(task)}
+                disabled={aiBusyTaskId === task.id}
+                className="shrink-0 opacity-0 group-hover:opacity-100 text-white/20 hover:text-[#A78BFA] transition-all disabled:opacity-40"
+                title="用 AI 拆成小步骤"
               >
-                <Link2 size={14} />
-              </button>
-            )}
-
-            {task.status !== 'done' && (
-              <button
-                onClick={() => breakDownTask(task.id)}
-                className="shrink-0 opacity-0 group-hover:opacity-100 text-white/20 hover:text-[#A78BFA] transition-all"
-                title="AI 拆解任务"
-              >
-                <Sparkles size={14} />
+                <Sparkles size={14} className={aiBusyTaskId === task.id ? 'animate-pulse' : ''} />
               </button>
             )}
 
@@ -271,8 +291,4 @@ function formatTaskTime(task: Task): string {
   if (task.startAt && task.endAt) return `${formatClock(task.startAt)}-${formatClock(task.endAt)}`
   if (task.reminderAt) return `提醒 ${formatClock(task.reminderAt)}`
   return '无时间段'
-}
-
-function taskContextCount(task: Task): number {
-  return (task.expectedApps?.length ?? 0) + (task.expectedDomains?.length ?? 0) + (task.expectedKeywords?.length ?? 0)
 }

@@ -13,6 +13,7 @@ export type PetState =
   | 'idle'
   | 'walkRight'
   | 'walkLeft'
+  | 'wave'
   | 'drag'
   | 'air'
   | 'focus'
@@ -79,7 +80,7 @@ export class StateMachine {
   tick(dt: number): void {
     const s = this.ctx.currentState
 
-    if (s === 'idle' || s === 'walkRight' || s === 'walkLeft') {
+    if (s === 'idle' || s === 'walkRight' || s === 'walkLeft' || s === 'wave') {
       this.ctx.idleTimer += dt
 
       // 深夜 → 睡觉
@@ -104,7 +105,29 @@ export class StateMachine {
     this.scheduleNextIdleAction()
     const roll = Math.random()
 
-    if (roll < 0.45) {
+    if (roll < 0.32) {
+      this.transition('wave')
+      this.ctx.emotion = 'happy'
+      setTimeout(() => {
+        if (this.ctx.currentState === 'wave' && !this.ctx.focusActive) this.transition('idle')
+      }, 1800)
+      return
+    }
+
+    if (roll < 0.57) {
+      const direction = this.ctx.walkDirection === 'right' ? 'walkLeft' : 'walkRight'
+      this.ctx.walkDirection = direction === 'walkRight' ? 'right' : 'left'
+      this.transition(direction)
+      this.ctx.emotion = 'neutral'
+      setTimeout(() => {
+        if ((this.ctx.currentState === 'walkRight' || this.ctx.currentState === 'walkLeft') && !this.ctx.focusActive) {
+          this.transition('idle')
+        }
+      }, 1800 + Math.random() * 1200)
+      return
+    }
+
+    if (roll < 0.75) {
       this.transition('alert')
       this.ctx.emotion = 'neutral'
       setTimeout(() => {
@@ -113,7 +136,7 @@ export class StateMachine {
       return
     }
 
-    if (roll < 0.7) {
+    if (roll < 0.9) {
       this.transition('celebrate')
       this.ctx.emotion = 'happy'
       setTimeout(() => {
@@ -133,18 +156,18 @@ export class StateMachine {
   onClick(): void {
     this.scheduleNextIdleAction()
     if (this.ctx.currentState === 'sleep') {
-      this.transition('alert')
+      this.transition('wave')
       setTimeout(() => {
-        if (this.ctx.currentState === 'alert') this.transition('idle')
+        if (this.ctx.currentState === 'wave') this.transition('idle')
       }, 2000)
       return
     }
     // 点击弹跳 → 短暂切换到 celebrate 再切回
     if (!['focus', 'drag', 'air'].includes(this.ctx.currentState)) {
-      this.transition('celebrate')
+      this.transition(Math.random() > 0.5 ? 'wave' : 'celebrate')
       this.ctx.emotion = 'happy'
       setTimeout(() => {
-        if (this.ctx.currentState === 'celebrate')
+        if (this.ctx.currentState === 'celebrate' || this.ctx.currentState === 'wave')
           this.transition('idle')
       }, 1500)
     }
@@ -223,9 +246,9 @@ export class StateMachine {
     if (this.ctx.focusActive) return
     if (this.ctx.currentState === 'idle' || this.ctx.currentState === 'walkLeft' || this.ctx.currentState === 'walkRight') {
       this.scheduleNextIdleAction()
-      this.transition('alert')
+      this.transition('wave')
       setTimeout(() => {
-        if (this.ctx.currentState === 'alert' && !this.ctx.focusActive) this.transition('idle')
+        if (this.ctx.currentState === 'wave' && !this.ctx.focusActive) this.transition('idle')
       }, 3500)
     }
   }

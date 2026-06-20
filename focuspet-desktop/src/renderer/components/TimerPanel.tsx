@@ -6,8 +6,8 @@ import { usePetEngine } from '../context/PetContext'
 export default function TimerPanel() {
   const {
     focusActive, focusRemaining, focusDuration, timerMode,
-    shortBreakDuration, longBreakDuration, completedPomoCount,
-    setFocusDuration, setBreakDurations,
+    shortBreakDuration, longBreakDuration, completedPomoCount, focusLockLevel,
+    setFocusDuration, setBreakDurations, setFocusLockLevel,
     startFocus, pauseFocus, resumeFocus,
     completeFocus, abandonFocus, currentTaskId, tasks,
     completeBreak,
@@ -204,7 +204,34 @@ export default function TimerPanel() {
       )}
       {!focusActive && timerMode === 'idle' && (
         <div className="text-center text-[11px] text-white/30 leading-relaxed">
-          专注会在后台继续计时，并让桌宠根据应用状态轻轻拉回你。
+          专注会绑定任务、监测应用状态，并按锁定强度由桌宠拉回你。
+        </div>
+      )}
+      {!focusActive && timerMode === 'idle' && (
+        <div className="w-full rounded-xl border border-white/[0.06] bg-white/[0.03] p-2">
+          <div className="mb-2 text-[11px] text-white/35">专注锁定</div>
+          <div className="grid grid-cols-3 gap-1">
+            {([
+              ['gentle', '温和'],
+              ['standard', '标准'],
+              ['strict', '严格'],
+            ] as const).map(([level, label]) => (
+              <button
+                key={level}
+                onClick={() => setFocusLockLevel(level)}
+                className={`rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                  focusLockLevel === level
+                    ? 'bg-[#A78BFA]/20 text-[#A78BFA]'
+                    : 'bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white/70'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 text-[10px] leading-relaxed text-white/25">
+            {lockLevelHint(focusLockLevel)}
+          </div>
         </div>
       )}
       {!focusActive && timerMode === 'idle' && (
@@ -297,6 +324,12 @@ function timerModeLabel(mode: string, active: boolean): string {
   if (mode === 'shortBreak') return '短休息'
   if (mode === 'longBreak') return '长休息'
   return '专注中'
+}
+
+function lockLevelHint(level: 'gentle' | 'standard' | 'strict'): string {
+  if (level === 'gentle') return '只记录和轻提醒，不主动展开面板。'
+  if (level === 'strict') return '黑名单持续出现时，桌宠会更快展开面板把你拉回。'
+  return '黑名单会扣分和气泡提醒，持续走神后展开面板。'
 }
 
 function pickFocusTask(tasks: Task[]): Task | undefined {

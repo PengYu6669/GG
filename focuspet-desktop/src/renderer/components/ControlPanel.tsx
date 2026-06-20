@@ -16,14 +16,15 @@ export default function ControlPanel({
   onAppMonitorChange: () => void
 }) {
   const [tab, setTab] = useState<Tab>('timer')
-  const { stardust, focusHistory, focusActive } = usePetStore()
+  const { stardust, focusActive } = usePetStore()
 
   return (
     <>
       {/* 控制面板 */}
       <div
-        className={`absolute ${anchor === 'left' ? 'left-4' : 'right-4'} top-4 bottom-4 w-72 bg-[#0F0F13]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden`}
+        className={`absolute ${anchor === 'left' ? 'left-[204px]' : 'right-2'} top-3 bottom-3 w-80 bg-[#0F0F13]/95 backdrop-blur-xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden`}
         style={{ pointerEvents: 'auto' }}
+        onMouseEnter={() => window.electronAPI?.setIgnoreMouseEvents(false)}
       >
         {/* 顶部栏 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0">
@@ -86,7 +87,7 @@ export default function ControlPanel({
 /** 统计面板 */
 function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) {
   const {
-    focusHistory, tasks, stardust, currentApp, appUsage, focusTelemetry,
+    focusHistory, tasks, stardust, currentApp, appUsage, focusTelemetry, currentTaskId,
     allowlistApps, blocklistApps, allowTitleKeywords, blockTitleKeywords,
     allowDomains, blockDomains,
     focusProfile, emergencyUntil, activateEmergencyUse, clearEmergencyUse, setAppRules,
@@ -125,7 +126,7 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
   const emergencyLeft = emergencyActive ? Math.ceil((emergencyUntil - Date.now()) / 1000) : 0
   const weekRollup = calcRecentRollup(focusHistory, 7)
   const todayRollup = calcRecentRollup(focusHistory, 1)
-  const currentTask = tasks.find(t => t.id === usePetStore.getState().currentTaskId)
+  const currentTask = tasks.find(t => t.id === currentTaskId)
   const taskRuntime = getTaskRuntimeState(currentTask, currentApp)
 
   const persistRules = useCallback((rules: {
@@ -294,7 +295,7 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
           <div>
             <div className="text-xs text-white/40">轻量锁</div>
             <div className="text-xs text-white/60 mt-1">
-              {emergencyActive ? `紧急使用剩余 ${formatDuration(emergencyLeft)}` : '黑名单时由桌宠提醒'}
+              {emergencyActive ? `紧急使用剩余 ${formatDuration(emergencyLeft)}` : '持续走神时展开面板拉回'}
             </div>
           </div>
           <button
@@ -560,15 +561,15 @@ function getTaskRuntimeState(task: Task | undefined, app: ReturnType<typeof useP
     return { label: '任务可能在跑', color: '#34D399', detail: `${contextLabel(kind)}：${app.context?.summary ?? app.title}` }
   }
   if (contextCount > 0 && app.rule === 'allow') {
-    return { label: '上下文匹配', color: '#34D399', detail: '当前应用符合任务预期。' }
+    return { label: '工作范围匹配', color: '#34D399', detail: '当前应用/网站适合这个任务。' }
   }
   if (contextCount > 0 && app.rule === 'neutral') {
-    return { label: '待确认', color: '#FBBF24', detail: '当前应用没有命中任务上下文。' }
+    return { label: '待确认', color: '#FBBF24', detail: '当前应用不在这个任务的工作范围里。' }
   }
   if (app.rule === 'block') {
     return { label: '风险中', color: '#F472B6', detail: '当前应用命中黑名单。' }
   }
-  return { label: '观察中', color: '#FBBF24', detail: '还没有给这个任务配置上下文。' }
+  return { label: '观察中', color: '#FBBF24', detail: '当前应用还没有明确归类。' }
 }
 
 function calcRecentRollup(history: Array<{ startedAt: number; actualDuration: number; plannedDuration: number; score?: number; pullbackCount?: number }>, days: number) {

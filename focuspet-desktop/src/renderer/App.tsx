@@ -3,7 +3,7 @@ import { PetProvider } from './context/PetContext'
 import PetWindow from './components/PetWindow'
 import ControlPanel from './components/ControlPanel'
 import { usePetEngine } from './context/PetContext'
-import { AppMonitorState, PersistedAppState, usePetStore } from './stores/usePetStore'
+import { appRuleOverrideKey, AppMonitorState, ForegroundAppSnapshot, PersistedAppState, usePetStore } from './stores/usePetStore'
 
 type PetBubbleState = { message: string }
 
@@ -30,6 +30,11 @@ function FocusPetApp() {
   const mealReminderRef = useRef<Record<string, boolean>>({})
   const lastIdlePromptAtRef = useRef(0)
   const idleGraceUntilRef = useRef(0)
+  const lastRuntimeHintAtRef = useRef(0)
+  const lastRuntimeKeyRef = useRef('')
+  const lastSoftLockAtRef = useRef(0)
+  const lastPullbackPanelAtRef = useRef(0)
+  const aiReviewInFlightRef = useRef<Set<string>>(new Set())
 
   const openPanel = useCallback(() => {
     setPanelOpen(true)
@@ -40,6 +45,10 @@ function FocusPetApp() {
     setPanelOpen(false)
     window.electronAPI?.collapseWindow()
   }, [])
+
+  useEffect(() => {
+    window.electronAPI?.setIgnoreMouseEvents(!panelOpen)
+  }, [panelOpen])
 
   useEffect(() => {
     window.electronAPI?.onAction((action) => {
@@ -140,25 +149,79 @@ function FocusPetApp() {
       ?? store.tasks.find(t => t.status === 'todo')
     const taskName = task?.name ?? '当前任务'
     const level = Math.min(3, pullbackLevelRef.current)
+    const appName = store.currentApp?.domain || store.currentApp?.app || '当前窗口'
     const messages = reason === 'blocked'
       ? [
-          '这个应用容易把时间吃掉，先回来一下？',
-          `先回到「${taskName}」，我陪你盯住这一轮。`,
-          `给自己 10 秒：打开和「${taskName}」有关的窗口。`,
-          '如果已经很难拉回，先短休 3 分钟也可以。',
+          `${appName} 容易把时间吃掉。先按 Alt+Tab 回到「${taskName}」。`,
+          `我把面板打开：只做「${taskName}」的下一小步。`,
+          `10 秒动作：关掉/最小化 ${appName}，打开任务相关窗口。`,
+          '这轮拉不回也没关系，先点紧急3分或短休一下。',
         ]
       : [
-          '我有点看不出这是不是任务相关，要不要确认一下？',
-          `现在的锚点是「${taskName}」，先回到它。`,
-          `10 秒落地动作：写一句、点开文件，或把下一步打出来。`,
-          '一直漂的话，可能不是懒，是脑子累了，短休一下。',
+          `${appName} 看起来不像任务主线。确认一下还在「${taskName}」吗？`,
+          `我把面板打开：先回到「${taskName}」这一条线。`,
+          '10 秒动作：写一句、点开文件，或把下一步打出来。',
+          '一直漂不是失败，可能是累了。先短休再回来。',
         ]
     pullbackLevelRef.current = level + 1
     lastPullbackAtRef.current = now
     store.recordPullback(level + 1, reason, messages[level])
-    sm.nudge()
-    showPetBubble(messages[level], 5000)
+    if (reason === 'blocked') sm.onDistraction()
+    else sm.onFocusDrift()
+    if (level >= 1 && now - lastPullbackPanelAtRef.current > 45 * 1000) {
+      lastPullbackPanelAtRef.current = now
+      openPanel()
+    }
+    showPetBubble(messages[level], 0)
+  }, [sm, showPetBubble, openPanel])
+
+  const showRuntimeHint = useCallback((snapshot: ForegroundAppSnapshot) => {
+    const now = Date.now()
+    const hint = getRuntimeHint(snapshot)
+    if (hint) {
+      const runtimeKey = `${snapshot.context?.kind}:${snapshot.app}:${snapshot.context?.summary || snapshot.title}`
+      const changed = runtimeKey !== lastRuntimeKeyRef.current
+      if (changed || now - lastRuntimeHintAtRef.current > 4 * 60 * 1000) {
+        lastRuntimeKeyRef.current = runtimeKey
+        lastRuntimeHintAtRef.current = now
+        sm.nudge()
+        showPetBubble(`▣ ${hint}`, 20000)
+      }
+      return
+    }
+
+    if (lastRuntimeKeyRef.current && now - lastRuntimeHintAtRef.current > 90 * 1000) {
+      lastRuntimeKeyRef.current = ''
+      lastRuntimeHintAtRef.current = now
+      sm.nudge()
+      showPetBubble('任务可能结束了，回来确认一下？', 20000)
+    }
   }, [sm, showPetBubble])
+
+  const requestAiAppReview = useCallback((snapshot: ForegroundAppSnapshot) => {
+    const store = usePetStore.getState()
+    if (!store.focusActive || snapshot.rule !== 'neutral') return
+    if (!window.electronAPI?.reviewAppWithAI) return
+    const key = appRuleOverrideKey(snapshot)
+    if (store.aiRuleOverrides[key] || aiReviewInFlightRef.current.has(key)) return
+    aiReviewInFlightRef.current.add(key)
+    const task = store.tasks.find(t => t.id === store.currentTaskId)
+    window.electronAPI.reviewAppWithAI({
+      taskName: task?.name,
+      app: snapshot.app,
+      title: snapshot.title,
+      domain: snapshot.domain,
+      url: snapshot.url,
+      contextKind: snapshot.context?.kind,
+    }).then(result => {
+      if (!result?.ok || !result.rule || result.rule === 'neutral') return
+      usePetStore.getState().setAiRuleOverride(snapshot, result.rule)
+      scheduleSaveAppMonitor()
+      showPetBubble(result.rule === 'allow' ? '我记住了：这个算工作范围。' : '我记住了：这个容易分心。', 20000)
+    }).finally(() => {
+      aiReviewInFlightRef.current.delete(key)
+    })
+  }, [scheduleSaveAppMonitor, showPetBubble])
 
   useEffect(() => {
     window.electronAPI?.onForegroundApp((info) => {
@@ -177,7 +240,11 @@ function FocusPetApp() {
       if (snapshot.rule === 'allow') {
         pullbackLevelRef.current = 0
         sm.onFocusAllowed()
+        showRuntimeHint(snapshot)
         return
+      }
+      if (snapshot.rule === 'neutral') {
+        requestAiAppReview(snapshot)
       }
       if (snapshot.rule === 'block') {
         if (Date.now() < store.emergencyUntil) {
@@ -185,6 +252,12 @@ function FocusPetApp() {
           return
         }
         const now = Date.now()
+        maybeSoftLock(store.focusLockLevel, telemetry.blockedSeconds, now, () => {
+          lastSoftLockAtRef.current = now
+          openPanel()
+          sm.onDistraction()
+          showPetBubble('我先把面板拉出来，回到任务上。', 0)
+        }, lastSoftLockAtRef.current)
         if (now - lastBlockedAtRef.current > 15000) {
           lastBlockedAtRef.current = now
           store.addDistraction()
@@ -198,7 +271,7 @@ function FocusPetApp() {
         showPullbackBubble('drift')
       }
     })
-  }, [sm, scheduleSaveAppMonitor, showPetBubble, showPullbackBubble])
+  }, [sm, scheduleSaveAppMonitor, showPetBubble, showPullbackBubble, showRuntimeHint, openPanel, requestAiAppReview])
 
   useEffect(() => {
     window.electronAPI?.onSystemIdle((idle) => {
@@ -321,10 +394,43 @@ function FocusPetApp() {
 
   return (
     <div className="w-full h-full bg-transparent">
-      <PetWindow onOpenPanel={openPanel} bubble={petBubble} />
+      <PetWindow onOpenPanel={openPanel} bubble={petBubble} panelOpen={panelOpen} />
       {panelOpen && <ControlPanel anchor={panelAnchor} onClose={closePanel} onAppMonitorChange={scheduleSaveAppMonitor} />}
     </div>
   )
+}
+
+function getRuntimeHint(app: ReturnType<typeof usePetStore.getState>['currentApp']): string | null {
+  const kind = app?.context?.kind
+  if (!app || !kind) return null
+  const appName = app.app || app.context?.summary || '应用'
+  const haystack = `${app.app} ${app.title} ${app.context?.summary}`.toLowerCase()
+  if (haystack.includes('codex')) return 'Codex 任务运行中'
+  if (kind === 'ai') return `${compactAppName(appName)} 正在处理`
+  if (kind === 'terminal') return '终端任务可能在跑'
+  if (kind === 'dev-server') return '本地服务运行中'
+  if (kind === 'editor') return `${compactAppName(appName)} 工作区已接管`
+  return null
+}
+
+function compactAppName(name: string): string {
+  const normalized = name.trim()
+  if (!normalized) return '应用'
+  if (/visual studio code/i.test(normalized)) return 'VSCode'
+  return normalized.length > 10 ? `${normalized.slice(0, 10)}...` : normalized
+}
+
+function maybeSoftLock(
+  level: ReturnType<typeof usePetStore.getState>['focusLockLevel'],
+  blockedSeconds: number,
+  now: number,
+  onLock: () => void,
+  lastLockedAt: number,
+): void {
+  const threshold = level === 'strict' ? 8 : level === 'standard' ? 18 : Number.POSITIVE_INFINITY
+  if (blockedSeconds < threshold) return
+  if (now - lastLockedAt < 60 * 1000) return
+  onLock()
 }
 
 function getMealReminder(now: Date): { key: string; message: string } | null {

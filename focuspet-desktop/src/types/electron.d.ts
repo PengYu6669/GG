@@ -21,6 +21,7 @@ export interface ElectronAPI {
   setIgnoreMouseEvents: (ignore: boolean) => void
   moveWindowStart: () => void
   startWindowDrag: (point: { screenX: number; screenY: number }) => void
+  moveWindowDrag: (point: { screenX: number; screenY: number }) => void
   endWindowDrag: () => void
   getUserDataPath: () => Promise<string>
   getDiagnostics: () => Promise<unknown>
@@ -29,6 +30,21 @@ export interface ElectronAPI {
   saveAppState: (state: unknown) => Promise<boolean>
   loadAppMonitorState: () => Promise<unknown>
   saveAppMonitorState: (state: unknown) => Promise<boolean>
+  breakDownTaskWithAI: (task: {
+    name: string
+    priority: 'high' | 'medium' | 'low'
+    estimatedPomos: number
+    startAt?: number
+    endAt?: number
+  }) => Promise<{ ok: boolean; tasks?: string[]; error?: string }>
+  reviewAppWithAI: (payload: {
+    taskName?: string
+    app: string
+    title: string
+    domain?: string
+    url?: string
+    contextKind?: string
+  }) => Promise<{ ok: boolean; rule?: 'allow' | 'block' | 'neutral'; reason?: string; error?: string }>
   openExternal: (url: string) => void
   setAlwaysOnTop: (flag: boolean) => void
   platform: string

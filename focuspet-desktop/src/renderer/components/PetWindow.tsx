@@ -8,9 +8,10 @@ import pigHeroSpritesheet from '../assets/pets/pixel-pig-hero/spritesheet.webp'
 
 const stateToAnim: Record<PetState, string> = {
   idle: 'idle', walkRight: 'running-right', walkLeft: 'running-left',
+  wave: 'waving',
   drag: 'idle', air: 'idle',
   focus: 'running', celebrate: 'jumping', sad: 'failed',
-  angry: 'waiting', sleep: 'idle', alert: 'review',
+  angry: 'waiting', sleep: 'waiting', alert: 'review',
 }
 
 const pixelPigHeroPet: PetDefinition = {
@@ -40,9 +41,11 @@ const PET_GROUND_Y = 220
 export default function PetWindow({
   onOpenPanel,
   bubble,
+  panelOpen = false,
 }: {
   onOpenPanel: () => void
   bubble: { message: string } | null
+  panelOpen?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
@@ -91,12 +94,20 @@ export default function PetWindow({
     const loop = (timestamp: number) => {
       if (sm.getState() !== 'drag') physics.update()
       const b = physics.getBody()
+      if (sm.getState() === 'walkRight') {
+        b.vx = Math.max(b.vx, 0.75)
+      } else if (sm.getState() === 'walkLeft') {
+        b.vx = Math.min(b.vx, -0.75)
+        if (b.x <= 4) {
+          b.x = 132
+        }
+      }
       const groundY = PET_GROUND_Y
       if (b.y + b.height >= groundY - 1 && sm.getState() === 'air') sm.onLand()
 
       canvas.style.transform = `translate(${b.x}px, ${b.y}px)`
       if (bubbleRef.current) {
-        bubbleRef.current.style.transform = `translate(${Math.max(122, b.x + 154)}px, ${Math.max(8, b.y - 8)}px)`
+        bubbleRef.current.style.transform = `translate(${Math.max(122, b.x + 148)}px, ${Math.max(6, b.y - 10)}px)`
       }
       if (sm.getState() === 'walkLeft') {
         canvas.style.transform = `translate(${b.x + b.width}px, ${b.y}px) scaleX(-1)`
@@ -120,6 +131,7 @@ export default function PetWindow({
   // ====== 鼠标 ======
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
+    window.electronAPI?.setIgnoreMouseEvents(false)
     dragMovedRef.current = false
     draggingWindowRef.current = true
     sm.onDragStart()
@@ -136,6 +148,7 @@ export default function PetWindow({
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (e.buttons === 1 && draggingWindowRef.current) {
       dragMovedRef.current = true
+      window.electronAPI?.moveWindowDrag({ screenX: e.screenX, screenY: e.screenY })
     }
     engine.animator?.setEyeTarget(e.clientX, e.clientY)
   }, [engine])
@@ -176,15 +189,18 @@ export default function PetWindow({
   }, [onOpenPanel])
 
   const handleMouseLeaveCanvas = useCallback(() => {
+    if (!draggingWindowRef.current && !panelOpen) {
+      window.electronAPI?.setIgnoreMouseEvents(true)
+    }
     handleMouseUp()
-  }, [handleMouseUp])
+  }, [handleMouseUp, panelOpen])
 
   return (
     <div className="fixed inset-0 select-none" style={{ pointerEvents: 'none' }}>
       {bubble && (
         <div
           ref={bubbleRef}
-          className="absolute z-[60] max-w-32 rounded-xl border border-black/10 bg-white/80 px-2.5 py-1.5 text-[11px] leading-snug text-black/75 shadow-md backdrop-blur-md"
+          className="absolute z-[60] max-w-44 rounded-xl border border-black/15 bg-white/90 px-3 py-2 text-[13px] font-medium leading-snug text-black shadow-md backdrop-blur-md"
           style={{ pointerEvents: 'none' }}
         >
           <div>{bubble.message}</div>
@@ -200,6 +216,7 @@ export default function PetWindow({
           imageRendering: 'pixelated',
         }}
         onMouseDown={handleMouseDown}
+        onMouseEnter={() => window.electronAPI?.setIgnoreMouseEvents(false)}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeaveCanvas}

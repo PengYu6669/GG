@@ -109,8 +109,11 @@ export interface AppMonitorState {
   blockDomains: string[]
   emergencyUntil: number
   appUsage: Record<string, AppUsageEntry>
+  aiRuleOverrides: Record<string, AppRule>
   savedAt: number
 }
+
+export type FocusLockLevel = 'gentle' | 'standard' | 'strict'
 
 export interface PersistedAppState {
   petName: string
@@ -121,6 +124,7 @@ export interface PersistedAppState {
   shortBreakDuration: number
   longBreakDuration: number
   completedPomoCount: number
+  focusLockLevel: FocusLockLevel
   savedAt: number
 }
 
@@ -141,6 +145,7 @@ interface PetStore {
   shortBreakDuration: number
   longBreakDuration: number
   completedPomoCount: number
+  focusLockLevel: FocusLockLevel
   currentTaskId: string | null
   distractionCount: number
 
@@ -156,6 +161,7 @@ interface PetStore {
   blockDomains: string[]
   focusProfile: FocusProfile | null
   emergencyUntil: number
+  aiRuleOverrides: Record<string, AppRule>
 
   // 任务
   tasks: Task[]
@@ -168,6 +174,7 @@ interface PetStore {
   startFocus: (taskId: string | null, durationMin: number, options?: { microStart?: boolean }) => void
   setFocusDuration: (minutes: number) => void
   setBreakDurations: (shortMinutes: number, longMinutes: number) => void
+  setFocusLockLevel: (level: FocusLockLevel) => void
   startBreak: (mode: 'shortBreak' | 'longBreak', durationMin?: number) => void
   completeBreak: () => void
   pauseFocus: () => void
@@ -184,6 +191,7 @@ interface PetStore {
   recordForegroundApp: (info: Omit<ForegroundAppSnapshot, 'rule'>) => ForegroundAppSnapshot
   resetFocusTelemetry: () => void
   setAppRules: (rules: Pick<AppMonitorState, 'allowlistApps' | 'blocklistApps' | 'allowTitleKeywords' | 'blockTitleKeywords' | 'allowDomains' | 'blockDomains'>) => void
+  setAiRuleOverride: (info: Pick<ForegroundAppSnapshot, 'app' | 'title' | 'domain'>, rule: AppRule) => void
   applyFocusProfile: (profile: FocusProfile) => void
   hydrateAppMonitor: (state: Partial<AppMonitorState> | null) => void
   exportAppMonitorState: () => AppMonitorState
@@ -191,6 +199,7 @@ interface PetStore {
   exportAppState: () => PersistedAppState
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void
   importTasks: (text: string) => number
+  addSubtasks: (parent: Task, names: string[]) => number
   updateTask: (id: string, patch: Partial<Omit<Task, 'id' | 'createdAt'>>) => void
   breakDownTask: (id: string) => number
   inferTaskContext: (id: string) => void
@@ -232,6 +241,8 @@ const DEFAULT_ALLOWLIST = [
 
 const DEFAULT_BLOCKLIST = [
   'steam',
+  'wegame',
+  'tencent wegame',
   'douyin',
   '抖音',
   'tiktok',
@@ -283,6 +294,7 @@ const DEFAULT_BLOCK_TITLE_KEYWORDS = [
   'douyin',
   'tiktok',
   'steam',
+  'wegame',
   'shorts',
   '小红书',
   '微博',
@@ -295,6 +307,7 @@ const DEFAULT_BLOCK_DOMAINS = [
   'youtube.com',
   'xiaohongshu.com',
   'weibo.com',
+  'wegame.com.cn',
 ]
 
 const TASK_CONTEXT_TEMPLATES = [
@@ -347,7 +360,7 @@ const FOCUS_PROFILES: Record<FocusProfile, AppRuleSet> = {
   },
   strict: {
     allowlistApps: ['code', 'visual studio code', 'cursor', 'codex', 'windsurf', 'trae', 'webstorm', 'intellij', 'pycharm', 'idea', 'jetbrains', 'terminal', 'powershell', 'iterm2', 'word', 'notion', 'obsidian', 'claude', 'doubao', '豆包', 'kimi', 'moonshot'],
-      blocklistApps: ['douyin', '抖音', 'tiktok', 'bilibili', 'steam', 'wechatappex', 'radiumwmpf', 'chrome', 'edge'],
+      blocklistApps: ['douyin', '抖音', 'tiktok', 'bilibili', 'steam', 'wegame', 'wechatappex', 'radiumwmpf'],
     allowTitleKeywords: ['github', 'docs', 'localhost', '127.0.0.1', '文档', 'document', 'claude', '豆包', 'kimi', 'moonshot'],
       blockTitleKeywords: ['抖音', 'douyin', 'tiktok', 'bilibili', 'shorts', 'youtube', '小红书', '微博', 'steam', '购物'],
       allowDomains: ['github.com', 'developer.mozilla.org', 'localhost', '127.0.0.1', 'kimi.com', 'moonshot.cn', 'chatgpt.com', 'claude.ai'],
@@ -392,6 +405,7 @@ const classifyApp = (
   blockTitleKeywords: string[],
   allowDomains: string[],
   blockDomains: string[],
+  aiRuleOverrides: Record<string, AppRule>,
 ): AppRule => {
   const normalized = normalizeAppName(app)
   const normalizedTitle = normalizeAppName(title)
@@ -403,8 +417,18 @@ const classifyApp = (
   if (allowTitleKeywords.some(item => normalizedTitle.includes(normalizeAppName(item)))) return 'allow'
   if (blocklist.some(item => normalized.includes(normalizeAppName(item)))) return 'block'
   if (allowlist.some(item => normalized.includes(normalizeAppName(item)))) return 'allow'
+  const aiOverride = aiRuleOverrides[appRuleOverrideKey({ app, title, domain })]
+  if (aiOverride) return aiOverride
   if (!normalized || normalized === 'unknown') return 'neutral'
   return 'neutral'
+}
+
+export const appRuleOverrideKey = (info: Pick<ForegroundAppSnapshot, 'app' | 'title' | 'domain'>): string => {
+  const domain = normalizeAppName(info.domain ?? '').replace(/^www\./, '')
+  if (domain) return `domain:${domain}`
+  const app = normalizeAppName(info.app)
+  const title = normalizeAppName(info.title).replace(/\s+/g, ' ').slice(0, 80)
+  return `app:${app}|${title}`
 }
 
 const listMatches = (value: string, list?: string[]) => {
@@ -445,6 +469,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
   shortBreakDuration: 5,
   longBreakDuration: 15,
   completedPomoCount: 0,
+  focusLockLevel: 'standard',
   currentTaskId: null,
   distractionCount: 0,
   currentApp: null,
@@ -458,6 +483,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
   blockDomains: DEFAULT_BLOCK_DOMAINS,
   focusProfile: null,
   emergencyUntil: 0,
+  aiRuleOverrides: {},
   tasks: [],
   focusHistory: [],
   focusEvents: [],
@@ -483,13 +509,15 @@ export const usePetStore = create<PetStore>((set, get) => ({
   },
 
   setFocusDuration: (minutes) =>
-    set({ focusDuration: Math.max(5, Math.min(120, minutes)) }),
+    set({ focusDuration: Math.max(1, Math.min(240, minutes)) }),
 
   setBreakDurations: (shortMinutes, longMinutes) =>
     set({
       shortBreakDuration: Math.max(1, Math.min(30, shortMinutes)),
       longBreakDuration: Math.max(5, Math.min(60, longMinutes)),
     }),
+
+  setFocusLockLevel: (level) => set({ focusLockLevel: level }),
 
   pauseFocus: () => {
     get().addFocusEvent({ type: 'pause' })
@@ -621,6 +649,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
       s.blockTitleKeywords,
       s.allowDomains,
       s.blockDomains,
+      s.aiRuleOverrides,
     )
     const snapshot: ForegroundAppSnapshot = { ...info, app, timestamp: now, rule }
 
@@ -722,6 +751,14 @@ export const usePetStore = create<PetStore>((set, get) => ({
       focusProfile: null,
     }),
 
+  setAiRuleOverride: (info, rule) =>
+    set(s => ({
+      aiRuleOverrides: {
+        ...s.aiRuleOverrides,
+        [appRuleOverrideKey(info)]: rule,
+      },
+    })),
+
   applyFocusProfile: (profile) => {
     const rules = FOCUS_PROFILES[profile]
     set({
@@ -747,6 +784,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
       focusProfile: (state as Partial<AppMonitorState> & { focusProfile?: FocusProfile | null }).focusProfile ?? null,
       emergencyUntil: state.emergencyUntil ?? 0,
       appUsage: state.appUsage ?? {},
+      aiRuleOverrides: (state as Partial<AppMonitorState>).aiRuleOverrides ?? {},
     })
   },
 
@@ -762,6 +800,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
       focusProfile: s.focusProfile,
       emergencyUntil: s.emergencyUntil,
       appUsage: s.appUsage,
+      aiRuleOverrides: s.aiRuleOverrides,
       savedAt: Date.now(),
     }
   },
@@ -777,6 +816,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
       shortBreakDuration: state.shortBreakDuration ?? 5,
       longBreakDuration: state.longBreakDuration ?? 15,
       completedPomoCount: state.completedPomoCount ?? 0,
+      focusLockLevel: state.focusLockLevel ?? 'standard',
     })
   },
 
@@ -791,6 +831,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
       shortBreakDuration: s.shortBreakDuration,
       longBreakDuration: s.longBreakDuration,
       completedPomoCount: s.completedPomoCount,
+      focusLockLevel: s.focusLockLevel,
       savedAt: Date.now(),
     }
   },
@@ -816,6 +857,32 @@ export const usePetStore = create<PetStore>((set, get) => ({
       ],
     }))
     return tasks.length
+  },
+
+  addSubtasks: (parent, names) => {
+    const cleanNames = names.map(name => name.trim()).filter(Boolean).slice(0, 8)
+    if (cleanNames.length === 0) return 0
+    set(s => ({
+      tasks: [
+        ...s.tasks,
+        ...cleanNames.map((name, index) => ({
+          name,
+          estimatedPomos: index === 0 ? Math.max(1, Math.min(parent.estimatedPomos, 2)) : 1,
+          completedPomos: 0,
+          priority: parent.priority,
+          status: 'todo' as const,
+          startAt: undefined,
+          endAt: undefined,
+          reminderAt: undefined,
+          expectedApps: parent.expectedApps,
+          expectedDomains: parent.expectedDomains,
+          expectedKeywords: parent.expectedKeywords,
+          id: generateId(),
+          createdAt: Date.now() + index,
+        })),
+      ],
+    }))
+    return cleanNames.length
   },
 
   updateTask: (id, patch) =>

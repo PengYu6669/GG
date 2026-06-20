@@ -10,6 +10,8 @@ const electronAPI = {
   moveWindowStart: () => ipcRenderer.send('window-move-start'),
   startWindowDrag: (point: { screenX: number; screenY: number }) =>
     ipcRenderer.send('window-drag-start', point),
+  moveWindowDrag: (point: { screenX: number; screenY: number }) =>
+    ipcRenderer.send('window-drag-move', point),
   endWindowDrag: () => ipcRenderer.send('window-drag-end'),
 
   // 数据
@@ -20,6 +22,21 @@ const electronAPI = {
   saveAppState: (state: unknown) => ipcRenderer.invoke('app-save-state', state),
   loadAppMonitorState: () => ipcRenderer.invoke('app-monitor-load-state'),
   saveAppMonitorState: (state: unknown) => ipcRenderer.invoke('app-monitor-save-state', state),
+  breakDownTaskWithAI: (task: {
+    name: string
+    priority: 'high' | 'medium' | 'low'
+    estimatedPomos: number
+    startAt?: number
+    endAt?: number
+  }) => ipcRenderer.invoke('task-ai-breakdown', task),
+  reviewAppWithAI: (payload: {
+    taskName?: string
+    app: string
+    title: string
+    domain?: string
+    url?: string
+    contextKind?: string
+  }) => ipcRenderer.invoke('app-ai-review', payload),
 
   // 系统
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
