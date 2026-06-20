@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Timer, ListFilter, BarChart3, Minimize2 } from 'lucide-react'
 import TimerPanel from './TimerPanel'
 import TaskPanel from './TaskPanel'
-import { usePetStore } from '../stores/usePetStore'
+import { usePetStore, type Task } from '../stores/usePetStore'
 
 type Tab = 'timer' | 'tasks' | 'stats'
 
@@ -125,6 +125,8 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
   const emergencyLeft = emergencyActive ? Math.ceil((emergencyUntil - Date.now()) / 1000) : 0
   const weekRollup = calcRecentRollup(focusHistory, 7)
   const todayRollup = calcRecentRollup(focusHistory, 1)
+  const currentTask = tasks.find(t => t.id === usePetStore.getState().currentTaskId)
+  const taskRuntime = getTaskRuntimeState(currentTask, currentApp)
 
   const persistRules = useCallback((rules: {
     allowlistApps: string[]
@@ -383,6 +385,19 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
         </div>
       </div>
 
+      <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.06]">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-white/40">任务状态</span>
+          <span className="text-[10px]" style={{ color: taskRuntime.color }}>{taskRuntime.label}</span>
+        </div>
+        <div className="mt-1 truncate text-xs text-white/55">
+          {currentTask?.name ?? '未绑定任务'}
+        </div>
+        <div className="mt-1 text-[10px] text-white/25 leading-relaxed">
+          {taskRuntime.detail}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={handleResetPosition}
@@ -534,6 +549,26 @@ function contextLabel(kind: string): string {
   if (kind === 'terminal') return '终端'
   if (kind === 'dev-server') return '本地服务'
   return '应用'
+}
+
+function getTaskRuntimeState(task: Task | undefined, app: ReturnType<typeof usePetStore.getState>['currentApp']) {
+  if (!task) return { label: '未开始', color: '#A1A1AA', detail: '开始专注后会绑定当前任务。' }
+  if (!app) return { label: '等待检测', color: '#FBBF24', detail: '还没有收到前台应用状态。' }
+  const contextCount = (task.expectedApps?.length ?? 0) + (task.expectedDomains?.length ?? 0) + (task.expectedKeywords?.length ?? 0)
+  const kind = app.context?.kind
+  if (kind === 'ai' || kind === 'terminal' || kind === 'dev-server') {
+    return { label: '任务可能在跑', color: '#34D399', detail: `${contextLabel(kind)}：${app.context?.summary ?? app.title}` }
+  }
+  if (contextCount > 0 && app.rule === 'allow') {
+    return { label: '上下文匹配', color: '#34D399', detail: '当前应用符合任务预期。' }
+  }
+  if (contextCount > 0 && app.rule === 'neutral') {
+    return { label: '待确认', color: '#FBBF24', detail: '当前应用没有命中任务上下文。' }
+  }
+  if (app.rule === 'block') {
+    return { label: '风险中', color: '#F472B6', detail: '当前应用命中黑名单。' }
+  }
+  return { label: '观察中', color: '#FBBF24', detail: '还没有给这个任务配置上下文。' }
 }
 
 function calcRecentRollup(history: Array<{ startedAt: number; actualDuration: number; plannedDuration: number; score?: number; pullbackCount?: number }>, days: number) {

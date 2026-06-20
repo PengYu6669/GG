@@ -40,7 +40,6 @@ focuspet-desktop/
 │   │   │   ├── ControlPanel.tsx
 │   │   │   ├── TimerPanel.tsx
 │   │   │   ├── TaskPanel.tsx
-│   │   │   └── CheckInModal.tsx
 │   │   ├── context/
 │   │   │   └── PetContext.tsx
 │   │   ├── engine/

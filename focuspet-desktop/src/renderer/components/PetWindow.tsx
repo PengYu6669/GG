@@ -7,10 +7,10 @@ import { usePetEngine } from '../context/PetContext'
 import pigHeroSpritesheet from '../assets/pets/pixel-pig-hero/spritesheet.webp'
 
 const stateToAnim: Record<PetState, string> = {
-  idle: 'idle', walkRight: 'walkRight', walkLeft: 'walkLeft',
+  idle: 'idle', walkRight: 'running-right', walkLeft: 'running-left',
   drag: 'idle', air: 'idle',
-  focus: 'focus', celebrate: 'celebrate', sad: 'sad',
-  angry: 'angry', sleep: 'sleep', alert: 'alert',
+  focus: 'running', celebrate: 'jumping', sad: 'failed',
+  angry: 'waiting', sleep: 'idle', alert: 'review',
 }
 
 const pixelPigHeroPet: PetDefinition = {
@@ -22,14 +22,14 @@ const pixelPigHeroPet: PetDefinition = {
   spritesheetPath: pigHeroSpritesheet,
   animations: {
     idle: { row: 0, frames: [0, 1, 2, 3, 4, 5], fps: 6 },
-    walkRight: { row: 1, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
-    walkLeft: { row: 2, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
-    focus: { row: 7, frames: [0, 1, 2, 3, 4, 5], fps: 5 },
-    celebrate: { row: 4, frames: [0, 1, 2, 3, 4], fps: 10 },
-    sad: { row: 5, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 5 },
-    angry: { row: 6, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
-    sleep: { row: 0, frames: [2, 3, 4, 5], fps: 3 },
-    alert: { row: 8, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
+    'running-right': { row: 1, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
+    'running-left': { row: 2, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 10 },
+    waving: { row: 3, frames: [0, 1, 2, 3], fps: 7 },
+    jumping: { row: 4, frames: [0, 1, 2, 3, 4], fps: 10 },
+    failed: { row: 5, frames: [0, 1, 2, 3, 4, 5, 6, 7], fps: 5 },
+    waiting: { row: 6, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
+    running: { row: 7, frames: [0, 1, 2, 3, 4, 5], fps: 5 },
+    review: { row: 8, frames: [0, 1, 2, 3, 4, 5], fps: 8 },
   },
 }
 

@@ -5,7 +5,6 @@ import ControlPanel from './components/ControlPanel'
 import { usePetEngine } from './context/PetContext'
 import { AppMonitorState, PersistedAppState, usePetStore } from './stores/usePetStore'
 
-type PetBubbleAction = { label: string; title: string; onClick: () => void }
 type PetBubbleState = { message: string }
 
 export default function App() {
@@ -96,7 +95,7 @@ function FocusPetApp() {
     }, 1000)
   }, [])
 
-  const showPetBubble = useCallback((message: string, cooldownMs = 12000, _actions?: PetBubbleAction[]) => {
+  const showPetBubble = useCallback((message: string, cooldownMs = 12000) => {
     const now = Date.now()
     if (now - lastBubbleAtRef.current < cooldownMs) return
     lastBubbleAtRef.current = now
@@ -122,45 +121,7 @@ function FocusPetApp() {
       const task = store.tasks.find(t => t.id === store.currentTaskId)
       const taskName = task?.name ?? '当前任务'
       sm.nudge()
-      showPetBubble(`还在「${taskName}」这条线上吗？`, 0, [
-        {
-          label: '✅',
-          title: '还在',
-          onClick: () => {
-            sm.dismissCheckIn()
-            showPetBubble('好，继续守住这一小段。', 0)
-          },
-        },
-        {
-          label: '😅',
-          title: '分心了',
-          onClick: () => {
-            const latest = usePetStore.getState()
-            latest.addDistraction()
-            latest.pauseFocus()
-            sm.onDistraction()
-            showPetBubble(`没关系，先回到「${taskName}」的下一小步。`, 0)
-          },
-        },
-        {
-          label: '🎉',
-          title: '完成了',
-          onClick: () => {
-            const latest = usePetStore.getState()
-            latest.completeFocus()
-            sm.completeFocus()
-            showPetBubble('漂亮，收个尾，再休一下眼睛。', 0)
-          },
-        },
-        {
-          label: '😵',
-          title: '卡住了',
-          onClick: () => {
-            sm.nudge()
-            showPetBubble('那就缩到 10 秒：只打开相关窗口，或者写下卡点。', 0)
-          },
-        },
-      ])
+      showPetBubble(`还在「${taskName}」这条线上吗？`, 0)
     }
     window.addEventListener('pet-check-in', handler)
     return () => window.removeEventListener('pet-check-in', handler)
@@ -196,12 +157,7 @@ function FocusPetApp() {
     lastPullbackAtRef.current = now
     store.recordPullback(level + 1, reason, messages[level])
     sm.nudge()
-    showPetBubble(messages[level], 5000, [
-      { label: '✅', title: '我回来了', onClick: () => setPetBubble(null) },
-      { label: '🎯', title: `回到 ${taskName}`, onClick: () => showPetBubble(`好，先只做「${taskName}」的下一小步。`, 0) },
-      { label: '☕', title: '短休一下', onClick: () => showPetBubble('可以，休 3 分钟，别开太远。', 0) },
-      { label: '😵', title: '现在很卡', onClick: () => showPetBubble('那就把任务缩到 10 秒：只打开相关窗口。', 0) },
-    ])
+    showPetBubble(messages[level], 5000)
   }, [sm, showPetBubble])
 
   useEffect(() => {
@@ -258,43 +214,8 @@ function FocusPetApp() {
       lastIdlePromptAtRef.current = now
       store.recordPullback(1, 'drift', `idle:${idle.seconds}s`)
       sm.onFocusDrift()
-      showPetBubble(`像是在等结果。要回来瞄一眼「${taskName}」吗？`, 0, [
-        {
-          label: '👀',
-          title: '回来看看',
-          onClick: () => {
-            idleGraceUntilRef.current = Date.now() + 45 * 1000
-            sm.dismissCheckIn()
-            showPetBubble('好，先看一眼结果，再决定下一步。', 0)
-          },
-        },
-        {
-          label: '⏳',
-          title: '继续等',
-          onClick: () => {
-            idleGraceUntilRef.current = Date.now() + 3 * 60 * 1000
-            showPetBubble('行，我先安静三分钟。', 0)
-          },
-        },
-        {
-          label: '📱',
-          title: '我走神了',
-          onClick: () => {
-            const latest = usePetStore.getState()
-            latest.addDistraction()
-            sm.onDistraction()
-            showPetBubble(`那就回来做「${taskName}」的下一小步。`, 0)
-          },
-        },
-        {
-          label: '☕',
-          title: '短休',
-          onClick: () => {
-            usePetStore.getState().startBreak('shortBreak', 3)
-            showPetBubble('可以，休三分钟，别刷太远。', 0)
-          },
-        },
-      ])
+      idleGraceUntilRef.current = now + 90 * 1000
+      showPetBubble(`像是在等结果。回来瞄一眼「${taskName}」？`, 0)
     })
   }, [sm, showPetBubble])
 
@@ -308,12 +229,7 @@ function FocusPetApp() {
         if (meal && !mealReminderRef.current[meal.key]) {
           mealReminderRef.current[meal.key] = true
           sm.nudge()
-          showPetBubble(meal.message, 30000, [
-            { label: '🍚', title: '知道了', onClick: () => setPetBubble(null) },
-            { label: '🥡', title: '点外卖', onClick: () => showPetBubble('好，先点饭，别饿着硬扛。', 0) },
-            { label: '⏰', title: '稍后提醒', onClick: () => showPetBubble('行，我晚点再轻轻提醒你。', 0) },
-            { label: '✅', title: '已经吃了', onClick: () => setPetBubble(null) },
-          ])
+          showPetBubble(meal.message, 30000)
           return
         }
       }
@@ -358,12 +274,7 @@ function FocusPetApp() {
         const praise = minutes >= 25
           ? `漂亮，刚刚稳住了 ${minutes} 分钟。起来走两步，眼睛也放松一下。`
           : `不错，先启动起来就很重要。${task ? `「${task.name}」已经推进了一点。` : '继续小步走。'}`
-        showPetBubble(praise, 0, [
-          { label: '🚶', title: '走一走', onClick: () => showPetBubble('去走一圈，回来再继续。', 0) },
-          { label: '💧', title: '喝水', onClick: () => showPetBubble('喝口水，身体也算项目依赖。', 0) },
-          { label: '☕', title: '再来一轮', onClick: () => usePetStore.getState().startFocus(session.taskId || null, 25) },
-          { label: '✅', title: '收下夸夸', onClick: () => setPetBubble(null) },
-        ])
+        showPetBubble(praise, 0)
       }
     })
     return unsubscribe
@@ -389,12 +300,7 @@ function FocusPetApp() {
         sm.completeFocus()
 
         if (wasMicroStart) {
-          showPetBubble(`${store.focusDuration} 分钟试完啦，要给「${taskName}」续杯吗？`, 0, [
-            { label: '☕', title: '再来 5 分钟', onClick: () => { usePetStore.getState().startFocus(taskId, 5, { microStart: true }); sm.startFocus() } },
-            { label: '🍵', title: '再来 2 分钟', onClick: () => { usePetStore.getState().startFocus(taskId, 2, { microStart: true }); sm.startFocus() } },
-            { label: '✅', title: '先收尾', onClick: () => setPetBubble(null) },
-            { label: '😮‍💨', title: '休息一下', onClick: () => usePetStore.getState().startBreak('shortBreak', 3) },
-          ])
+          showPetBubble(`${store.focusDuration} 分钟试完啦，要给「${taskName}」续杯吗？`, 0)
           return
         }
 

@@ -10,7 +10,7 @@ The current product direction is a low-pressure attention pullback pet for ADHD-
 - keep the current task visible enough to return to
 - monitor app/site context during focus
 - nudge with pet bubbles instead of harsh system popups
-- make task breakdown and recovery actions small and low-friction
+- make task breakdown and recovery prompts small and low-friction
 
 ## Current App
 
@@ -75,7 +75,7 @@ Implemented:
 - local-template task breakdown button
 - adjustable focus, short break, and long break durations
 - 2/5 minute micro-starts
-- pet bubbles with four quick actions
+- low-distraction pet bubbles
 - foreground app monitoring on Windows/macOS
 - best-effort browser URL/domain detection
 - allow/block rules for apps, titles, and domains

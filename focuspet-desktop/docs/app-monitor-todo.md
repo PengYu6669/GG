@@ -67,8 +67,15 @@ Idle signal design:
 
 - Idle is not automatically treated as failure.
 - Waiting for AI, terminal tasks, or local builds is allowed, but after sustained no-input FocusPet asks the user to glance back.
-- The user can choose “continue waiting” to create a short grace period.
-- Choosing “I drifted” records a distraction and triggers the normal pet pullback path.
+- FocusPet creates a short grace period after an idle prompt so it does not repeatedly interrupt.
+- Choosing explicit recovery actions is deferred because bubbles are currently pure low-distraction prompts.
+
+Task context matching:
+
+- Tasks can now hold expected apps, domains, and keywords.
+- The task panel can infer a starter context from the task name.
+- During focus, task context is checked before the general app allow/block rules.
+- The stats panel shows a simple runtime state: matching, waiting/running, risky, or unknown.
 
 ## Known Limitations
 

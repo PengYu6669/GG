@@ -28,6 +28,22 @@ The core loop:
 - Low-frequency idle random actions.
 - Focus state stays visually calm.
 
+### Pet Animation Mapping
+
+The spritesheet follows the 8x9 hatch-pet atlas:
+
+- row 0 `idle` -> idle / sleep subset
+- row 1 `running-right` -> walkRight
+- row 2 `running-left` -> walkLeft
+- row 3 `waving` -> available but not currently used by StateMachine
+- row 4 `jumping` -> celebrate
+- row 5 `failed` -> sad/distraction
+- row 6 `waiting` -> angry/repeated distraction
+- row 7 `running` -> focus/working
+- row 8 `review` -> alert/checking
+
+The app state names are product semantics; animation names now match the atlas row names.
+
 ### Focus And ADHD Support
 
 - Pomodoro focus mode.
@@ -35,7 +51,7 @@ The core loop:
 - Short/long breaks.
 - Micro-start: try 2/5 minutes.
 - Micro-start completion asks whether to continue.
-- Pet bubbles with four emoji actions.
+- Low-distraction pet bubbles without inline quick buttons.
 - Low-distraction pet bubble styling.
 - Escalating pullback protocol:
   - soft reminder
@@ -43,7 +59,7 @@ The core loop:
   - 10-second landing action
   - suggest break
 - Focus completion praise.
-- Walk/water/continue quick actions.
+- Walk/water/continue prompts.
 - Lunch/dinner reminders.
 
 ### Tasks
@@ -73,6 +89,8 @@ The core loop:
   - ChatGPT / OpenAI
   - Doubao
 - System idle prompt for long no-input periods during focus, especially while waiting for AI/build/terminal work.
+- Task runtime state card: matching / waiting / risk / unknown.
+- Task context inference from task name.
 
 ### Telemetry
 
@@ -154,7 +172,7 @@ Stats should answer:
 Current random check-in still uses a modal component. Next:
 
 - replace check-in modal with pet bubble
-- keep four emoji quick actions
+- keep pet-only prompts
 - record whether the user returned, postponed, took a break, or was stuck
 
 ## Medium Priority

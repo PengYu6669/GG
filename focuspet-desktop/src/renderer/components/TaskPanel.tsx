@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, CheckCircle2, Circle, Flag, ClipboardList, ClipboardPaste, Sparkles } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, Circle, Flag, ClipboardList, ClipboardPaste, Sparkles, Link2 } from 'lucide-react'
 import { usePetStore, type Task } from '../stores/usePetStore'
 
 const priorityColors: Record<Task['priority'], string> = {
@@ -9,7 +9,7 @@ const priorityColors: Record<Task['priority'], string> = {
 }
 
 export default function TaskPanel() {
-  const { tasks, addTask, importTasks, updateTask, breakDownTask, completeTask, deleteTask } = usePetStore()
+  const { tasks, addTask, importTasks, updateTask, breakDownTask, inferTaskContext, completeTask, deleteTask } = usePetStore()
   const [newName, setNewName] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [view, setView] = useState<'scheduled' | 'unscheduled' | 'all' | 'done'>('scheduled')
@@ -204,6 +204,7 @@ export default function TaskPanel() {
               </span>
               <div className="flex items-center gap-2 text-[10px] text-white/25">
                 <span>{formatTaskTime(task)}</span>
+                {taskContextCount(task) > 0 && <span>上下文 {taskContextCount(task)}</span>}
                 {task.status !== 'done' && (
                   <button
                     onClick={() => updateTask(task.id, { estimatedPomos: task.estimatedPomos >= 4 ? 1 : task.estimatedPomos + 1 })}
@@ -219,6 +220,16 @@ export default function TaskPanel() {
             <span className="shrink-0" style={{ color: priorityColors[task.priority] }}>
               <Flag size={10} fill={priorityColors[task.priority]} />
             </span>
+
+            {task.status !== 'done' && (
+              <button
+                onClick={() => inferTaskContext(task.id)}
+                className="shrink-0 opacity-0 group-hover:opacity-100 text-white/20 hover:text-[#34D399] transition-all"
+                title="推断任务上下文"
+              >
+                <Link2 size={14} />
+              </button>
+            )}
 
             {task.status !== 'done' && (
               <button
@@ -260,4 +271,8 @@ function formatTaskTime(task: Task): string {
   if (task.startAt && task.endAt) return `${formatClock(task.startAt)}-${formatClock(task.endAt)}`
   if (task.reminderAt) return `提醒 ${formatClock(task.reminderAt)}`
   return '无时间段'
+}
+
+function taskContextCount(task: Task): number {
+  return (task.expectedApps?.length ?? 0) + (task.expectedDomains?.length ?? 0) + (task.expectedKeywords?.length ?? 0)
 }

@@ -14,6 +14,9 @@ export interface Task {
   reminderAt?: number
   remindedAt?: number
   overdueRemindedAt?: number
+  expectedApps?: string[]
+  expectedDomains?: string[]
+  expectedKeywords?: string[]
 }
 
 export interface FocusSession {
@@ -190,6 +193,7 @@ interface PetStore {
   importTasks: (text: string) => number
   updateTask: (id: string, patch: Partial<Omit<Task, 'id' | 'createdAt'>>) => void
   breakDownTask: (id: string) => number
+  inferTaskContext: (id: string) => void
   completeTask: (id: string) => void
   deleteTask: (id: string) => void
 }
@@ -293,6 +297,27 @@ const DEFAULT_BLOCK_DOMAINS = [
   'weibo.com',
 ]
 
+const TASK_CONTEXT_TEMPLATES = [
+  {
+    test: /(代码|开发|编程|bug|修复|前端|后端|接口|组件|electron|react|typescript|vite|codex|vscode|cursor)/i,
+    apps: ['code', 'visual studio code', 'cursor', 'codex', 'windsurf', 'trae', 'webstorm', 'intellij', 'pycharm', 'terminal', 'powershell', 'node', 'git'],
+    domains: ['github.com', 'stackoverflow.com', 'developer.mozilla.org', 'localhost', '127.0.0.1', 'chatgpt.com', 'claude.ai', 'kimi.com'],
+    keywords: ['github', 'docs', 'api', 'localhost', 'vscode', 'cursor', 'codex', 'terminal'],
+  },
+  {
+    test: /(写|文档|方案|需求|prd|总结|文章|笔记|设计)/i,
+    apps: ['word', 'notion', 'obsidian', 'typora', 'chrome', 'edge', 'safari', 'claude', 'kimi', 'doubao'],
+    domains: ['docs.google.com', 'notion.so', 'yuque.com', 'feishu.cn', 'chatgpt.com', 'claude.ai', 'kimi.com', 'doubao.com'],
+    keywords: ['文档', 'document', 'docs', 'notion', 'obsidian', 'claude', 'kimi'],
+  },
+  {
+    test: /(学习|课程|论文|阅读|复习|刷题|研究)/i,
+    apps: ['chrome', 'edge', 'safari', 'pdf', 'acrobat', 'obsidian', 'notion', 'claude', 'kimi'],
+    domains: ['wikipedia.org', 'coursera.org', 'edx.org', 'github.com', 'chatgpt.com', 'claude.ai', 'kimi.com'],
+    keywords: ['course', '课程', 'pdf', '论文', 'paper', 'wikipedia', 'docs'],
+  },
+]
+
 type AppRuleSet = Pick<AppMonitorState, 'allowlistApps' | 'blocklistApps' | 'allowTitleKeywords' | 'blockTitleKeywords' | 'allowDomains' | 'blockDomains'>
 
 const FOCUS_PROFILES: Record<FocusProfile, AppRuleSet> = {
@@ -380,6 +405,33 @@ const classifyApp = (
   if (allowlist.some(item => normalized.includes(normalizeAppName(item)))) return 'allow'
   if (!normalized || normalized === 'unknown') return 'neutral'
   return 'neutral'
+}
+
+const listMatches = (value: string, list?: string[]) => {
+  const normalized = normalizeAppName(value)
+  return !!normalized && !!list?.some(item => normalized.includes(normalizeAppName(item)) || normalizeAppName(item).includes(normalized))
+}
+
+const classifyTaskContext = (task: Task | undefined, info: Omit<ForegroundAppSnapshot, 'rule'>): AppRule | null => {
+  if (!task) return null
+  const hasContext = !!task.expectedApps?.length || !!task.expectedDomains?.length || !!task.expectedKeywords?.length
+  if (!hasContext) return null
+  const haystack = `${info.app} ${info.title} ${info.domain ?? ''} ${info.url ?? ''}`
+  if (listMatches(info.domain ?? '', task.expectedDomains)) return 'allow'
+  if (listMatches(info.app, task.expectedApps)) return 'allow'
+  if (task.expectedKeywords?.some(keyword => normalizeAppName(haystack).includes(normalizeAppName(keyword)))) return 'allow'
+  if (info.context?.kind === 'ai' && task.expectedApps?.some(app => /claude|kimi|chatgpt|doubao|openai/i.test(app))) return 'allow'
+  return null
+}
+
+const inferContextForTask = (task: Task): Pick<Task, 'expectedApps' | 'expectedDomains' | 'expectedKeywords'> => {
+  const matched = TASK_CONTEXT_TEMPLATES.find(template => template.test.test(task.name))
+  if (!matched) return {}
+  return {
+    expectedApps: matched.apps,
+    expectedDomains: matched.domains,
+    expectedKeywords: matched.keywords,
+  }
 }
 
 export const usePetStore = create<PetStore>((set, get) => ({
@@ -557,7 +609,9 @@ export const usePetStore = create<PetStore>((set, get) => ({
     const s = get()
     const now = info.timestamp || Date.now()
     const app = info.app || 'unknown'
-    const rule = classifyApp(
+    const currentTask = s.tasks.find(task => task.id === s.currentTaskId)
+    const taskRule = classifyTaskContext(currentTask, info)
+    const rule = taskRule ?? classifyApp(
       app,
       info.title,
       info.domain ?? '',
@@ -785,6 +839,11 @@ export const usePetStore = create<PetStore>((set, get) => ({
     }))
     return subtasks.length
   },
+
+  inferTaskContext: (id) =>
+    set(s => ({
+      tasks: s.tasks.map(t => t.id === id ? { ...t, ...inferContextForTask(t) } : t),
+    })),
 
   completeTask: (id) =>
     set(s => ({
