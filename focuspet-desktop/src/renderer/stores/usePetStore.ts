@@ -200,6 +200,15 @@ const DEFAULT_ALLOWLIST = [
   'code',
   'visual studio code',
   'cursor',
+  'codex',
+  'windsurf',
+  'trae',
+  'webstorm',
+  'intellij',
+  'pycharm',
+  'idea',
+  'jetbrains',
+  'github desktop',
   'claude',
   'doubao',
   '豆包',
@@ -211,6 +220,10 @@ const DEFAULT_ALLOWLIST = [
   'powershell',
   'terminal',
   'iterm2',
+  'warp',
+  'cmd',
+  'bash',
+  'zsh',
 ]
 
 const DEFAULT_BLOCKLIST = [
@@ -233,6 +246,11 @@ const DEFAULT_ALLOW_TITLE_KEYWORDS = [
   'openai',
   'vscode',
   'visual studio code',
+  'codex',
+  'cursor',
+  'windsurf',
+  'trae',
+  'jetbrains',
   'github',
   'docs',
   'document',
@@ -279,9 +297,9 @@ type AppRuleSet = Pick<AppMonitorState, 'allowlistApps' | 'blocklistApps' | 'all
 
 const FOCUS_PROFILES: Record<FocusProfile, AppRuleSet> = {
   programming: {
-      allowlistApps: ['code', 'visual studio code', 'cursor', 'terminal', 'powershell', 'iterm2', 'node', 'git', 'claude', 'doubao', '豆包', 'kimi', 'moonshot'],
+      allowlistApps: ['code', 'visual studio code', 'cursor', 'codex', 'windsurf', 'trae', 'webstorm', 'intellij', 'pycharm', 'idea', 'jetbrains', 'terminal', 'powershell', 'iterm2', 'warp', 'node', 'git', 'github desktop', 'claude', 'doubao', '豆包', 'kimi', 'moonshot'],
       blocklistApps: ['douyin', '抖音', 'tiktok', 'bilibili', 'steam', 'wechatappex', 'radiumwmpf'],
-      allowTitleKeywords: ['github', 'docs', 'documentation', 'localhost', '127.0.0.1', 'vscode', 'cursor', 'claude', '豆包', 'kimi', 'moonshot', 'chatgpt', 'api', 'stack overflow'],
+      allowTitleKeywords: ['github', 'docs', 'documentation', 'localhost', '127.0.0.1', 'vscode', 'cursor', 'codex', 'windsurf', 'trae', 'jetbrains', 'claude', '豆包', 'kimi', 'moonshot', 'chatgpt', 'api', 'stack overflow'],
       blockTitleKeywords: ['抖音', 'douyin', 'tiktok', 'bilibili', 'shorts', 'steam', '小红书'],
       allowDomains: ['github.com', 'stackoverflow.com', 'developer.mozilla.org', 'localhost', '127.0.0.1', 'kimi.com', 'moonshot.cn', 'chatgpt.com', 'claude.ai'],
       blockDomains: ['douyin.com', 'tiktok.com', 'bilibili.com', 'youtube.com', 'xiaohongshu.com'],
@@ -303,7 +321,7 @@ const FOCUS_PROFILES: Record<FocusProfile, AppRuleSet> = {
       blockDomains: ['douyin.com', 'tiktok.com', 'youtube.com', 'xiaohongshu.com'],
   },
   strict: {
-    allowlistApps: ['code', 'visual studio code', 'cursor', 'terminal', 'powershell', 'iterm2', 'word', 'notion', 'obsidian', 'claude', 'doubao', '豆包', 'kimi', 'moonshot'],
+    allowlistApps: ['code', 'visual studio code', 'cursor', 'codex', 'windsurf', 'trae', 'webstorm', 'intellij', 'pycharm', 'idea', 'jetbrains', 'terminal', 'powershell', 'iterm2', 'word', 'notion', 'obsidian', 'claude', 'doubao', '豆包', 'kimi', 'moonshot'],
       blocklistApps: ['douyin', '抖音', 'tiktok', 'bilibili', 'steam', 'wechatappex', 'radiumwmpf', 'chrome', 'edge'],
     allowTitleKeywords: ['github', 'docs', 'localhost', '127.0.0.1', '文档', 'document', 'claude', '豆包', 'kimi', 'moonshot'],
       blockTitleKeywords: ['抖音', 'douyin', 'tiktok', 'bilibili', 'shorts', 'youtube', '小红书', '微博', 'steam', '购物'],

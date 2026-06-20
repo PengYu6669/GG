@@ -203,17 +203,20 @@ function inferContext(info) {
   const domain = domainFromUrl(url);
   const haystack = `${app} ${title} ${url} ${domain}`;
 
-  if (isBrowserApp(app)) {
-    return { kind: "browser", active: true, summary: domain || title || "Browser" };
-  }
-  if (/(code|cursor|visual studio code)/.test(app)) {
-    const workspace = String(info.title || "").split(" - ").pop() || "workspace";
-    return { kind: "editor", active: true, summary: workspace };
-  }
   if (/(claude|doubao|豆包|kimi|moonshot|chatgpt|openai)/.test(haystack)) {
     return { kind: "ai", active: true, summary: String(info.title || info.app || "AI assistant") };
   }
-  if (/(powershell|terminal|iterm|cmd|bash|zsh|node)/.test(app)) {
+  if (isBrowserApp(app)) {
+    return { kind: "browser", active: true, summary: domain || title || "Browser" };
+  }
+  if (/(code|cursor|visual studio code|codex|windsurf|trae|webstorm|intellij|pycharm|idea|jetbrains|github desktop)/.test(haystack)) {
+    const workspace = String(info.title || "")
+      .split(/\s[-—]\s/)
+      .filter(Boolean)
+      .pop() || "workspace";
+    return { kind: "editor", active: true, summary: workspace };
+  }
+  if (/(powershell|terminal|iterm|cmd|bash|zsh|node|npm|pnpm|yarn|git|warp)/.test(haystack)) {
     return { kind: "terminal", active: true, summary: String(info.title || info.app || "terminal") };
   }
   if (/(localhost|127\\.0\\.0\\.1|vite|webpack|next\\.js|electron)/.test(haystack)) {

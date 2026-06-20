@@ -341,6 +341,15 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
               {contextLabel(currentApp.context.kind)} · {currentApp.context.summary}
             </div>
           )}
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-white/25">
+            <span>PID {currentApp?.pid || '-'}</span>
+            <span className="text-right">{currentApp?.timestamp ? formatClock(currentApp.timestamp) : '等待检测'}</span>
+          </div>
+          {currentApp?.path && (
+            <div className="mt-1 truncate text-[10px] text-white/20" title={currentApp.path}>
+              {currentApp.path}
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-1">
             <button
               onClick={() => addCurrentRule('app', 'allow')}
@@ -417,7 +426,7 @@ function StatsPanel({ onAppMonitorChange }: { onAppMonitorChange: () => void }) 
       <div className="space-y-2">
         <h4 className="text-xs text-white/40 font-medium">应用状态</h4>
         {appRows.map(app => (
-          <div key={app.app} className="grid grid-cols-[1fr_auto] gap-2 text-xs text-white/60">
+          <div key={`${app.app}:${app.title}`} className="grid grid-cols-[1fr_auto] gap-2 text-xs text-white/60">
             <div className="min-w-0">
               <div className="truncate">{app.app}</div>
               {app.title && <div className="truncate text-[10px] text-white/25">{app.title}</div>}
@@ -492,6 +501,10 @@ function formatDuration(totalSeconds: number): string {
   const seconds = totalSeconds % 60
   if (minutes <= 0) return `${seconds}s`
   return `${minutes}m ${seconds}s`
+}
+
+function formatClock(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 function ruleLabel(rule: 'allow' | 'block' | 'neutral'): string {

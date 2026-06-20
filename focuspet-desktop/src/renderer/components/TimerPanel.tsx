@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { Play, Pause, StopCircle } from 'lucide-react'
 import { usePetStore, type Task } from '../stores/usePetStore'
 import { usePetEngine } from '../context/PetContext'
@@ -15,6 +15,13 @@ export default function TimerPanel() {
   const { stateMachine: sm } = usePetEngine()
 
   const checkInTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const [focusInput, setFocusInput] = useState(String(focusDuration))
+  const [shortBreakInput, setShortBreakInput] = useState(String(shortBreakDuration))
+  const [longBreakInput, setLongBreakInput] = useState(String(longBreakDuration))
+
+  useEffect(() => setFocusInput(String(focusDuration)), [focusDuration])
+  useEffect(() => setShortBreakInput(String(shortBreakDuration)), [shortBreakDuration])
+  useEffect(() => setLongBreakInput(String(longBreakDuration)), [longBreakDuration])
 
   // ====== 防走神：随机认知校验 ======
   useEffect(() => {
@@ -72,6 +79,21 @@ export default function TimerPanel() {
     completeBreak()
     sm.wakeUp()
   }, [completeBreak, sm])
+
+  const commitFocusDuration = useCallback(() => {
+    const next = Number.parseInt(focusInput, 10)
+    if (Number.isFinite(next)) setFocusDuration(next)
+    else setFocusInput(String(focusDuration))
+  }, [focusInput, focusDuration, setFocusDuration])
+
+  const commitBreakDurations = useCallback(() => {
+    const shortNext = Number.parseInt(shortBreakInput, 10)
+    const longNext = Number.parseInt(longBreakInput, 10)
+    setBreakDurations(
+      Number.isFinite(shortNext) ? shortNext : shortBreakDuration,
+      Number.isFinite(longNext) ? longNext : longBreakDuration,
+    )
+  }, [shortBreakInput, longBreakInput, shortBreakDuration, longBreakDuration, setBreakDurations])
 
   // ====== UI ======
   const plannedSeconds = timerMode === 'shortBreak'
@@ -142,15 +164,42 @@ export default function TimerPanel() {
           >
             -5
           </button>
-          <span className="text-lg font-mono w-20 text-center tabular-nums">
-            {focusDuration} 分钟
-          </span>
+          <label className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
+            <input
+              type="number"
+              min={1}
+              max={240}
+              value={focusInput}
+              onChange={e => setFocusInput(e.target.value)}
+              onBlur={commitFocusDuration}
+              onKeyDown={e => { if (e.key === 'Enter') commitFocusDuration() }}
+              className="w-14 bg-transparent text-center font-mono text-lg text-white outline-none tabular-nums"
+            />
+            <span className="text-xs text-white/35">分</span>
+          </label>
           <button
             onClick={() => setFocusDuration(focusDuration + 5)}
             className="px-2 py-1 rounded-lg border border-white/10 hover:bg-white/5 hover:text-white transition-colors text-xs"
           >
             +5
           </button>
+        </div>
+      )}
+      {!focusActive && timerMode === 'idle' && (
+        <div className="grid grid-cols-4 gap-1 w-full">
+          {[15, 25, 45, 60].map(value => (
+            <button
+              key={value}
+              onClick={() => setFocusDuration(value)}
+              className={`rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                focusDuration === value
+                  ? 'bg-[#A78BFA]/20 text-[#A78BFA]'
+                  : 'bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white/70'
+              }`}
+            >
+              {value}m
+            </button>
+          ))}
         </div>
       )}
       {!focusActive && timerMode === 'idle' && (
@@ -175,20 +224,34 @@ export default function TimerPanel() {
         </div>
       )}
       {!focusActive && (
-        <div className="flex items-center gap-2 text-xs text-white/35">
+        <div className="grid grid-cols-[auto_1fr_1fr] gap-2 items-center text-xs text-white/35 w-full">
           <span>已完成 {completedPomoCount} 轮</span>
-          <button
-            onClick={() => setBreakDurations(shortBreakDuration >= 15 ? 3 : shortBreakDuration + 1, longBreakDuration)}
-            className="hover:text-white/65"
-          >
-            短休 {shortBreakDuration}m
-          </button>
-          <button
-            onClick={() => setBreakDurations(shortBreakDuration, longBreakDuration >= 30 ? 10 : longBreakDuration + 5)}
-            className="hover:text-white/65"
-          >
-            长休 {longBreakDuration}m
-          </button>
+          <label className="flex items-center justify-end gap-1">
+            <span>短休</span>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={shortBreakInput}
+              onChange={e => setShortBreakInput(e.target.value)}
+              onBlur={commitBreakDurations}
+              onKeyDown={e => { if (e.key === 'Enter') commitBreakDurations() }}
+              className="w-10 rounded-md border border-white/10 bg-white/[0.03] px-1 py-1 text-center text-white/65 outline-none"
+            />
+          </label>
+          <label className="flex items-center justify-end gap-1">
+            <span>长休</span>
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={longBreakInput}
+              onChange={e => setLongBreakInput(e.target.value)}
+              onBlur={commitBreakDurations}
+              onKeyDown={e => { if (e.key === 'Enter') commitBreakDurations() }}
+              className="w-10 rounded-md border border-white/10 bg-white/[0.03] px-1 py-1 text-center text-white/65 outline-none"
+            />
+          </label>
         </div>
       )}
 

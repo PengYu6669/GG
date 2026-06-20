@@ -6,7 +6,7 @@ import { usePetEngine } from './context/PetContext'
 import { AppMonitorState, PersistedAppState, usePetStore } from './stores/usePetStore'
 
 type PetBubbleAction = { label: string; title: string; onClick: () => void }
-type PetBubbleState = { message: string; actions?: PetBubbleAction[] }
+type PetBubbleState = { message: string }
 
 export default function App() {
   return (
@@ -96,11 +96,11 @@ function FocusPetApp() {
     }, 1000)
   }, [])
 
-  const showPetBubble = useCallback((message: string, cooldownMs = 12000, actions?: PetBubbleAction[]) => {
+  const showPetBubble = useCallback((message: string, cooldownMs = 12000, _actions?: PetBubbleAction[]) => {
     const now = Date.now()
     if (now - lastBubbleAtRef.current < cooldownMs) return
     lastBubbleAtRef.current = now
-    setPetBubble({ message, actions })
+    setPetBubble({ message })
     if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current)
     bubbleTimerRef.current = setTimeout(() => setPetBubble(null), 3800)
   }, [])
@@ -109,7 +109,7 @@ function FocusPetApp() {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<PetBubbleState>).detail
       if (!detail?.message) return
-      showPetBubble(detail.message, 0, detail.actions)
+      showPetBubble(detail.message, 0)
     }
     window.addEventListener('pet-bubble', handler)
     return () => window.removeEventListener('pet-bubble', handler)

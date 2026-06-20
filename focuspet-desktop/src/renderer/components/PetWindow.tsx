@@ -42,7 +42,7 @@ export default function PetWindow({
   bubble,
 }: {
   onOpenPanel: () => void
-  bubble: { message: string; actions?: Array<{ label: string; title: string; onClick: () => void }> } | null
+  bubble: { message: string } | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
